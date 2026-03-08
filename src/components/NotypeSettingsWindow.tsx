@@ -59,14 +59,12 @@ function Toggle({
       aria-checked={checked}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-7 w-12 items-center rounded-full border transition ${
-        checked ? "border-emerald-600 bg-emerald-600" : "border-slate-300 bg-white"
-      } ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+      className={`relative inline-flex h-7 w-12 items-center rounded-full border transition ${checked ? "border-emerald-600 bg-emerald-600" : "border-slate-300 bg-white"
+        } ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
     >
       <span
-        className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
-          checked ? "translate-x-6" : "translate-x-1"
-        }`}
+        className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${checked ? "translate-x-6" : "translate-x-1"
+          }`}
       />
     </button>
   );
@@ -213,9 +211,9 @@ export default function NotypeSettingsWindow() {
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(190,242,100,0.35),_transparent_30%),linear-gradient(180deg,_#f8fafc,_#eef2ff_55%,_#f8fafc)] text-slate-900">
-      <div className="mx-auto flex min-h-screen max-w-5xl flex-col px-6 py-8">
-        <div className="mb-3 flex h-8 items-center justify-center text-[11px] font-medium uppercase tracking-[0.26em] text-slate-400 app-region-drag select-none">
-          Drag Window
+      <div className="mx-auto flex min-h-screen max-w-5xl flex-col px-6 pb-8 pt-0">
+        <div className="app-region-drag -mx-6 h-14 shrink-0 select-none" aria-hidden="true">
+          <div className="h-full pl-24 pr-6" />
         </div>
 
         <div className="flex items-start justify-between gap-6 app-region-drag select-none">
@@ -253,11 +251,10 @@ export default function NotypeSettingsWindow() {
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id as TabId)}
-                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition ${
-                  selected
-                    ? "bg-slate-950 text-white shadow-sm"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
-                }`}
+                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition ${selected
+                  ? "bg-slate-950 text-white shadow-sm"
+                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
+                  }`}
               >
                 <Icon size={16} />
                 {tab.label}
