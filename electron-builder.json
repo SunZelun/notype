@@ -102,7 +102,7 @@
   "mac": {
     "category": "public.app-category.productivity",
     "target": ["dmg", "zip"],
-    "icon": "src/assets/icon.icns",
+    "icon": "AppIcons/appstore.png",
     "gatekeeperAssess": false,
     "hardenedRuntime": true,
     "entitlements": "resources/mac/entitlements.mac.plist",
@@ -182,7 +182,7 @@
   },
   "dmg": {
     "title": "NOTYPE",
-    "icon": "src/assets/icon.icns",
+    "icon": "AppIcons/appstore.png",
     "window": {
       "width": 540,
       "height": 380

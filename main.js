@@ -1,5 +1,6 @@
 const { app, globalShortcut, BrowserWindow, dialog, ipcMain } = require("electron");
 const path = require("path");
+const fs = require("fs");
 require("dotenv").config({ path: path.join(__dirname, ".env") });
 
 const VALID_CHANNELS = new Set(["development", "staging", "production"]);
@@ -88,6 +89,28 @@ const isLiveWindow = (window) => window && !window.isDestroyed();
 // Ensure macOS menus use the proper casing for the app name
 if (process.platform === "darwin" && app.getName() !== "NOTYPE") {
   app.setName("NOTYPE");
+}
+
+function setDockIcon() {
+  if (process.platform !== "darwin" || !app.dock) {
+    return;
+  }
+
+  const candidates = [
+    path.join(__dirname, "src", "assets", "icon.png"),
+    path.join(__dirname, "AppIcons", "appstore.png"),
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) {
+        app.dock.setIcon(candidate);
+        return;
+      }
+    } catch {
+      // Ignore dock icon errors and fall back to Electron's default.
+    }
+  }
 }
 
 // Add global error handling for uncaught exceptions
@@ -244,6 +267,8 @@ function initializeDeferredManagers() {
 
 // Main application startup
 async function startApp() {
+  setDockIcon();
+
   // Phase 1: Core managers + IPC handlers before windows
   initializeCoreManagers();
 
