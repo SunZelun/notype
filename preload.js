@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   pasteText: (text, options) => ipcRenderer.invoke("paste-text", text, options),
   hideWindow: () => ipcRenderer.invoke("hide-window"),
   showDictationPanel: () => ipcRenderer.invoke("show-dictation-panel"),
+  openSettingsWindow: () => ipcRenderer.invoke("open-settings-window"),
   onToggleDictation: registerListener("toggle-dictation", (callback) => () => callback()),
   onStartDictation: registerListener("start-dictation", (callback) => () => callback()),
   onStopDictation: registerListener("stop-dictation", (callback) => () => callback()),
@@ -66,79 +67,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
   },
   undoLearnedCorrections: (words) => ipcRenderer.invoke("undo-learned-corrections", words),
 
-  // Note functions
-  saveNote: (title, content, noteType, sourceFile, audioDuration, folderId) =>
-    ipcRenderer.invoke(
-      "db-save-note",
-      title,
-      content,
-      noteType,
-      sourceFile,
-      audioDuration,
-      folderId
-    ),
-  getNote: (id) => ipcRenderer.invoke("db-get-note", id),
-  getNotes: (noteType, limit, folderId) =>
-    ipcRenderer.invoke("db-get-notes", noteType, limit, folderId),
-  updateNote: (id, updates) => ipcRenderer.invoke("db-update-note", id, updates),
-  deleteNote: (id) => ipcRenderer.invoke("db-delete-note", id),
-  exportNote: (noteId, format) => ipcRenderer.invoke("export-note", noteId, format),
-  searchNotes: (query, limit) => ipcRenderer.invoke("db-search-notes", query, limit),
-  updateNoteCloudId: (id, cloudId) => ipcRenderer.invoke("db-update-note-cloud-id", id, cloudId),
-
-  // Folder functions
-  getFolders: () => ipcRenderer.invoke("db-get-folders"),
-  createFolder: (name) => ipcRenderer.invoke("db-create-folder", name),
-  deleteFolder: (id) => ipcRenderer.invoke("db-delete-folder", id),
-  renameFolder: (id, name) => ipcRenderer.invoke("db-rename-folder", id, name),
-  getFolderNoteCounts: () => ipcRenderer.invoke("db-get-folder-note-counts"),
-
-  // Action functions
-  getActions: () => ipcRenderer.invoke("db-get-actions"),
-  getAction: (id) => ipcRenderer.invoke("db-get-action", id),
-  createAction: (name, description, prompt, icon) =>
-    ipcRenderer.invoke("db-create-action", name, description, prompt, icon),
-  updateAction: (id, updates) => ipcRenderer.invoke("db-update-action", id, updates),
-  deleteAction: (id) => ipcRenderer.invoke("db-delete-action", id),
-
   // Audio file operations
   selectAudioFile: () => ipcRenderer.invoke("select-audio-file"),
   getFileSize: (filePath) => ipcRenderer.invoke("get-file-size", filePath),
   transcribeAudioFile: (filePath, options) =>
     ipcRenderer.invoke("transcribe-audio-file", filePath, options),
   getPathForFile: (file) => webUtils.getPathForFile(file),
-
-  onNoteAdded: (callback) => {
-    const listener = (_event, note) => callback?.(note);
-    ipcRenderer.on("note-added", listener);
-    return () => ipcRenderer.removeListener("note-added", listener);
-  },
-  onNoteUpdated: (callback) => {
-    const listener = (_event, note) => callback?.(note);
-    ipcRenderer.on("note-updated", listener);
-    return () => ipcRenderer.removeListener("note-updated", listener);
-  },
-  onNoteDeleted: (callback) => {
-    const listener = (_event, data) => callback?.(data);
-    ipcRenderer.on("note-deleted", listener);
-    return () => ipcRenderer.removeListener("note-deleted", listener);
-  },
-
-  onActionCreated: (callback) => {
-    const listener = (_event, action) => callback?.(action);
-    ipcRenderer.on("action-created", listener);
-    return () => ipcRenderer.removeListener("action-created", listener);
-  },
-  onActionUpdated: (callback) => {
-    const listener = (_event, action) => callback?.(action);
-    ipcRenderer.on("action-updated", listener);
-    return () => ipcRenderer.removeListener("action-updated", listener);
-  },
-  onActionDeleted: (callback) => {
-    const listener = (_event, data) => callback?.(data);
-    ipcRenderer.on("action-deleted", listener);
-    return () => ipcRenderer.removeListener("action-deleted", listener);
-  },
 
   onTranscriptionAdded: (callback) => {
     const listener = (_event, transcription) => callback?.(transcription);
@@ -352,20 +286,18 @@ contextBridge.exposeInMainWorld("electronAPI", {
   openMicrophoneSettings: () => ipcRenderer.invoke("open-microphone-settings"),
   openSoundInputSettings: () => ipcRenderer.invoke("open-sound-input-settings"),
   openAccessibilitySettings: () => ipcRenderer.invoke("open-accessibility-settings"),
+  getActiveAppMetadata: () => ipcRenderer.invoke("get-active-app-metadata"),
   toggleMediaPlayback: () => ipcRenderer.invoke("toggle-media-playback"),
   pauseMediaPlayback: () => ipcRenderer.invoke("pause-media-playback"),
   resumeMediaPlayback: () => ipcRenderer.invoke("resume-media-playback"),
   openWhisperModelsFolder: () => ipcRenderer.invoke("open-whisper-models-folder"),
-  authClearSession: () => ipcRenderer.invoke("auth-clear-session"),
 
-  // OpenWhispr Cloud API
+  // Legacy cloud API surface retained from the upstream base
   cloudTranscribe: (audioBuffer, opts) => ipcRenderer.invoke("cloud-transcribe", audioBuffer, opts),
   cloudReason: (text, opts) => ipcRenderer.invoke("cloud-reason", text, opts),
   cloudStreamingUsage: (text, audioDurationSeconds, opts) =>
     ipcRenderer.invoke("cloud-streaming-usage", text, audioDurationSeconds, opts),
   cloudUsage: () => ipcRenderer.invoke("cloud-usage"),
-  cloudCheckout: (plan) => ipcRenderer.invoke("cloud-checkout", plan),
-  cloudBillingPortal: () => ipcRenderer.invoke("cloud-billing-portal"),
   getSttConfig: () => ipcRenderer.invoke("get-stt-config"),
 
   // Cloud audio file transcription
@@ -376,11 +308,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
     "upload-transcription-progress",
     (callback) => (_event, data) => callback(data)
   ),
-
-  // Referral stats
-  getReferralStats: () => ipcRenderer.invoke("get-referral-stats"),
-  sendReferralInvite: (email) => ipcRenderer.invoke("send-referral-invite", email),
-  getReferralInvites: () => ipcRenderer.invoke("get-referral-invites"),
 
   // Assembly AI Streaming
   assemblyAiStreamingWarmup: (options) =>
@@ -431,10 +358,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
     "deepgram-session-end",
     (callback) => (_event, data) => callback(data)
   ),
-
-  // Usage limit events (for showing UpgradePrompt in ControlPanel)
-  notifyLimitReached: (data) => ipcRenderer.send("limit-reached", data),
-  onLimitReached: registerListener("limit-reached", (callback) => (_event, data) => callback(data)),
 
   // Globe key listener for hotkey capture (macOS only)
   onGlobeKeyPressed: (callback) => {

@@ -18,13 +18,12 @@ dirsToClean.forEach((dir) => {
 // Clean development database
 console.log("🗄️ Cleaning development database...");
 try {
-  // Use the same logic as the database.js file to determine the user data path
   const userDataPath =
     process.platform === "darwin"
-      ? path.join(os.homedir(), "Library", "Application Support", "open-whispr")
+      ? path.join(os.homedir(), "Library", "Application Support", "NOTYPE-development")
       : process.platform === "win32"
-      ? path.join(process.env.APPDATA || os.homedir(), "open-whispr")
-      : path.join(os.homedir(), ".config", "open-whispr");
+        ? path.join(process.env.APPDATA || os.homedir(), "NOTYPE-development")
+        : path.join(os.homedir(), ".config", "NOTYPE-development");
 
   const devDbPath = path.join(userDataPath, "transcriptions-dev.db");
 

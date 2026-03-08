@@ -36,7 +36,6 @@ export default defineConfig(({ mode }) => {
         writeBundle() {
           const runtimeEnv = {
             VITE_OPENWHISPR_API_URL: env.VITE_OPENWHISPR_API_URL || '',
-            VITE_NEON_AUTH_URL: env.VITE_NEON_AUTH_URL || '',
           }
           fs.writeFileSync(
             path.resolve(__dirname, 'dist', 'runtime-env.json'),
@@ -78,14 +77,41 @@ export default defineConfig(({ mode }) => {
           '@aws-sdk/client-s3'
         ],
         output: {
-          manualChunks: {
-            'vendor-radix': [
-              '@radix-ui/react-dialog',
-              '@radix-ui/react-dropdown-menu',
-              '@radix-ui/react-select',
-              '@radix-ui/react-tabs',
-            ],
-            'vendor-icons': ['lucide-react'],
+          manualChunks(id) {
+            if (id.includes('node_modules/lucide-react')) {
+              return 'vendor-icons'
+            }
+
+            if (
+              id.includes('node_modules/react/') ||
+              id.includes('node_modules/react-dom/') ||
+              id.includes('node_modules/scheduler/')
+            ) {
+              return 'vendor-react'
+            }
+
+            if (
+              id.includes('node_modules/i18next/') ||
+              id.includes('node_modules/react-i18next/')
+            ) {
+              return 'vendor-i18n'
+            }
+
+            if (id.includes('node_modules/zustand/')) {
+              return 'vendor-state'
+            }
+
+            const localeMatch = id.match(/\/src\/locales\/([^/]+)\//)
+            if (localeMatch?.[1]) {
+              return `locale-${localeMatch[1].toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+            }
+
+            if (
+              id.includes('/src/locales/prompts.ts') ||
+              id.includes('/src/locales/translations.ts')
+            ) {
+              return 'vendor-locales-core'
+            }
           },
         },
       }

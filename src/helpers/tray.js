@@ -2,20 +2,18 @@ const { Tray, Menu, nativeImage, app } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const debugLogger = require("./debugLogger");
-const { i18nMain } = require("./i18nMain");
-
 class TrayManager {
   constructor() {
     this.tray = null;
     this.mainWindow = null;
-    this.controlPanelWindow = null;
+    this.settingsWindow = null;
     this.windowManager = null;
-    this.attachedControlPanels = new WeakSet();
+    this.attachedSettingsWindows = new WeakSet();
   }
 
-  setWindows(mainWindow, controlPanelWindow) {
+  setWindows(mainWindow, settingsWindow) {
     this.mainWindow = mainWindow;
-    this.controlPanelWindow = controlPanelWindow;
+    this.settingsWindow = settingsWindow;
 
     if (this.mainWindow) {
       this.mainWindow.on("show", () => this.updateTrayMenu?.());
@@ -24,8 +22,8 @@ class TrayManager {
       this.mainWindow.on("restore", () => this.updateTrayMenu?.());
     }
 
-    if (this.controlPanelWindow) {
-      this.attachControlPanelListeners(this.controlPanelWindow);
+    if (this.settingsWindow) {
+      this.attachSettingsWindowListeners(this.settingsWindow);
     }
 
     this.updateTrayMenu?.();
@@ -35,16 +33,16 @@ class TrayManager {
     this.windowManager = windowManager;
   }
 
-  setCreateControlPanelCallback(callback) {
-    this.createControlPanelCallback = callback;
+  setCreateSettingsCallback(callback) {
+    this.createSettingsCallback = callback;
   }
 
-  attachControlPanelListeners(window) {
-    if (!window || this.attachedControlPanels.has(window)) {
+  attachSettingsWindowListeners(window) {
+    if (!window || this.attachedSettingsWindows.has(window)) {
       return;
     }
 
-    this.attachedControlPanels.add(window);
+    this.attachedSettingsWindows.add(window);
 
     window.on("show", () => {
       this.updateTrayMenu?.();
@@ -55,54 +53,52 @@ class TrayManager {
     });
 
     window.on("destroyed", () => {
-      this.controlPanelWindow = null;
+      this.settingsWindow = null;
       this.updateTrayMenu?.();
     });
   }
 
-  async showControlPanelFromTray() {
+  async showSettingsFromTray() {
     try {
       if (this.windowManager) {
-        this.controlPanelWindow = this.windowManager.controlPanelWindow || this.controlPanelWindow;
+        this.settingsWindow = this.windowManager.settingsWindow || this.settingsWindow;
       }
-      this.attachControlPanelListeners(this.controlPanelWindow);
+      this.attachSettingsWindowListeners(this.settingsWindow);
 
-      if (this.controlPanelWindow && !this.controlPanelWindow.isDestroyed()) {
-        // Show dock icon on macOS when control panel opens
+      if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
         if (process.platform === "darwin" && app.dock) {
           app.dock.show();
         }
-        if (this.controlPanelWindow.isMinimized()) {
-          this.controlPanelWindow.restore();
+        if (this.settingsWindow.isMinimized()) {
+          this.settingsWindow.restore();
         }
-        if (!this.controlPanelWindow.isVisible()) {
-          this.controlPanelWindow.show();
+        if (!this.settingsWindow.isVisible()) {
+          this.settingsWindow.show();
         }
-        this.controlPanelWindow.focus();
-        if (this.controlPanelWindow.webContents.isCrashed()) {
-          this.controlPanelWindow.webContents.reload();
+        this.settingsWindow.focus();
+        if (this.settingsWindow.webContents.isCrashed()) {
+          this.settingsWindow.webContents.reload();
         }
         return;
       }
 
-      if (this.createControlPanelCallback) {
-        await this.createControlPanelCallback();
+      if (this.createSettingsCallback) {
+        await this.createSettingsCallback();
         if (this.windowManager) {
-          this.controlPanelWindow =
-            this.windowManager.controlPanelWindow || this.controlPanelWindow;
+          this.settingsWindow = this.windowManager.settingsWindow || this.settingsWindow;
         }
-        this.attachControlPanelListeners(this.controlPanelWindow);
+        this.attachSettingsWindowListeners(this.settingsWindow);
 
-        if (this.controlPanelWindow && !this.controlPanelWindow.isDestroyed()) {
-          this.controlPanelWindow.show();
-          this.controlPanelWindow.focus();
+        if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
+          this.settingsWindow.show();
+          this.settingsWindow.focus();
         }
         return;
       }
 
-      debugLogger.error("No control panel callback available", undefined, "tray");
+      debugLogger.error("No settings window callback available", undefined, "tray");
     } catch (error) {
-      debugLogger.error("Failed to open control panel", { error: error?.message }, "tray");
+      debugLogger.error("Failed to open settings window", { error: error?.message }, "tray");
     }
   }
 
@@ -233,8 +229,8 @@ class TrayManager {
     return [
       {
         label: dictationVisible
-          ? i18nMain.t("tray.toggleDictation.hide")
-          : i18nMain.t("tray.toggleDictation.show"),
+          ? "Hide Dictation Bubble"
+          : "Show Dictation Bubble",
         click: () => {
           if (!this.windowManager) return;
           if (this.windowManager.isDictationPanelVisible()) {
@@ -246,14 +242,14 @@ class TrayManager {
         },
       },
       {
-        label: i18nMain.t("tray.openControlPanel"),
+        label: "Open Settings",
         click: async () => {
-          await this.showControlPanelFromTray();
+          await this.showSettingsFromTray();
         },
       },
       { type: "separator" },
       {
-        label: i18nMain.t("tray.quit"),
+        label: "Quit NOTYPE",
         click: () => {
           debugLogger.info("Quitting app via tray menu", undefined, "tray");
           app.quit();
@@ -266,7 +262,7 @@ class TrayManager {
     if (!this.tray) return;
 
     const contextMenu = Menu.buildFromTemplate(this.buildContextMenuTemplate());
-    this.tray.setToolTip(i18nMain.t("tray.tooltip"));
+    this.tray.setToolTip("NOTYPE");
     this.tray.setContextMenu(contextMenu);
   }
 
@@ -277,7 +273,7 @@ class TrayManager {
 
     if (process.platform !== "darwin") {
       this.tray.on("click", () => {
-        void this.showControlPanelFromTray();
+        void this.showSettingsFromTray();
       });
     }
 

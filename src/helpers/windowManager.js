@@ -9,7 +9,7 @@ const { i18nMain } = require("./i18nMain");
 const { DEV_SERVER_PORT } = DevServerManager;
 const {
   MAIN_WINDOW_CONFIG,
-  CONTROL_PANEL_CONFIG,
+  SETTINGS_WINDOW_CONFIG,
   WINDOW_SIZES,
   WindowPositionUtil,
 } = require("./windowConfig");
@@ -17,7 +17,7 @@ const {
 class WindowManager {
   constructor() {
     this.mainWindow = null;
-    this.controlPanelWindow = null;
+    this.settingsWindow = null;
     this.tray = null;
     this.hotkeyManager = new HotkeyManager();
     this.dragManager = new DragManager();
@@ -76,7 +76,7 @@ class WindowManager {
     );
 
     this.mainWindow.webContents.on("did-finish-load", () => {
-      this.mainWindow.setTitle(i18nMain.t("window.voiceRecorderTitle"));
+      this.mainWindow.setTitle("NOTYPE");
       this.enforceMainWindowOnTop();
     });
 
@@ -146,14 +146,14 @@ class WindowManager {
     return { success: true, bounds: { x: newX, y: newY, ...newSize } };
   }
 
-  async loadWindowContent(window, isControlPanel = false) {
+  async loadWindowContent(window, isSettingsWindow = false) {
     if (process.env.NODE_ENV === "development") {
-      const appUrl = DevServerManager.getAppUrl(isControlPanel);
+      const appUrl = DevServerManager.getAppUrl(isSettingsWindow);
       await DevServerManager.waitForDevServer();
       await window.loadURL(appUrl);
     } else {
       // Production: use loadFile() for better compatibility with Electron 36+
-      const fileInfo = DevServerManager.getAppFilePath(isControlPanel);
+      const fileInfo = DevServerManager.getAppFilePath(isSettingsWindow);
       if (!fileInfo) {
         throw new Error("Failed to get app file path");
       }
@@ -475,29 +475,26 @@ class WindowManager {
     });
   }
 
-  async createControlPanelWindow() {
-    if (this.controlPanelWindow && !this.controlPanelWindow.isDestroyed()) {
-      if (this.controlPanelWindow.isMinimized()) {
-        this.controlPanelWindow.restore();
+  async createSettingsWindow() {
+    if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
+      if (this.settingsWindow.isMinimized()) {
+        this.settingsWindow.restore();
       }
-      if (!this.controlPanelWindow.isVisible()) {
-        this.controlPanelWindow.show();
+      if (!this.settingsWindow.isVisible()) {
+        this.settingsWindow.show();
       }
-      this.controlPanelWindow.focus();
+      this.settingsWindow.focus();
       return;
     }
 
-    this.controlPanelWindow = new BrowserWindow(CONTROL_PANEL_CONFIG);
+    this.settingsWindow = new BrowserWindow(SETTINGS_WINDOW_CONFIG);
 
-    this.controlPanelWindow.webContents.on("will-navigate", (event, url) => {
+    this.settingsWindow.webContents.on("will-navigate", (event, url) => {
       const appUrl = DevServerManager.getAppUrl(true);
-      const controlPanelUrl = appUrl.startsWith("http") ? appUrl : `file://${appUrl}`;
+      const isKnownWindowRoute =
+        (appUrl && url.startsWith(appUrl)) || url.startsWith("file://") || url.startsWith("devtools://");
 
-      if (
-        url.startsWith(controlPanelUrl) ||
-        url.startsWith("file://") ||
-        url.startsWith("devtools://")
-      ) {
+      if (isKnownWindowRoute) {
         return;
       }
 
@@ -505,12 +502,12 @@ class WindowManager {
       this.openExternalUrl(url);
     });
 
-    this.controlPanelWindow.webContents.setWindowOpenHandler(({ url }) => {
+    this.settingsWindow.webContents.setWindowOpenHandler(({ url }) => {
       this.openExternalUrl(url);
       return { action: "deny" };
     });
 
-    this.controlPanelWindow.webContents.on("did-create-window", (childWindow, details) => {
+    this.settingsWindow.webContents.on("did-create-window", (childWindow, details) => {
       childWindow.close();
       if (details.url && !details.url.startsWith("devtools://")) {
         this.openExternalUrl(details.url, false);
@@ -518,12 +515,12 @@ class WindowManager {
     });
 
     const visibilityTimer = setTimeout(() => {
-      if (!this.controlPanelWindow || this.controlPanelWindow.isDestroyed()) {
+      if (!this.settingsWindow || this.settingsWindow.isDestroyed()) {
         return;
       }
-      if (!this.controlPanelWindow.isVisible()) {
-        this.controlPanelWindow.show();
-        this.controlPanelWindow.focus();
+      if (!this.settingsWindow.isVisible()) {
+        this.settingsWindow.show();
+        this.settingsWindow.focus();
       }
     }, 10000);
 
@@ -531,35 +528,35 @@ class WindowManager {
       clearTimeout(visibilityTimer);
     };
 
-    this.controlPanelWindow.once("ready-to-show", () => {
+    this.settingsWindow.once("ready-to-show", () => {
       clearVisibilityTimer();
       if (process.platform === "darwin" && app.dock) {
         app.dock.show();
       }
-      this.controlPanelWindow.show();
-      this.controlPanelWindow.focus();
+      this.settingsWindow.show();
+      this.settingsWindow.focus();
     });
 
-    this.controlPanelWindow.on("close", (event) => {
+    this.settingsWindow.on("close", (event) => {
       if (!this.isQuitting) {
         event.preventDefault();
-        this.hideControlPanelToTray();
+        this.hideSettingsWindow();
       }
     });
 
-    this.controlPanelWindow.on("closed", () => {
+    this.settingsWindow.on("closed", () => {
       clearVisibilityTimer();
-      this.controlPanelWindow = null;
+      this.settingsWindow = null;
     });
 
-    MenuManager.setupControlPanelMenu(this.controlPanelWindow);
+    MenuManager.setupSettingsWindowMenu(this.settingsWindow);
 
-    this.controlPanelWindow.webContents.on("did-finish-load", () => {
+    this.settingsWindow.webContents.on("did-finish-load", () => {
       clearVisibilityTimer();
-      this.controlPanelWindow.setTitle(i18nMain.t("window.controlPanelTitle"));
+      this.settingsWindow.setTitle("NOTYPE Settings");
     });
 
-    this.controlPanelWindow.webContents.on(
+    this.settingsWindow.webContents.on(
       "did-fail-load",
       (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
         if (!isMainFrame) {
@@ -567,38 +564,42 @@ class WindowManager {
         }
         clearVisibilityTimer();
         if (process.env.NODE_ENV !== "development") {
-          this.showLoadFailureDialog("Control panel", errorCode, errorDescription, validatedURL);
+          this.showLoadFailureDialog("Settings window", errorCode, errorDescription, validatedURL);
         }
-        if (!this.controlPanelWindow.isVisible()) {
-          this.controlPanelWindow.show();
-          this.controlPanelWindow.focus();
+        if (!this.settingsWindow.isVisible()) {
+          this.settingsWindow.show();
+          this.settingsWindow.focus();
         }
       }
     );
 
-    this.controlPanelWindow.webContents.on("render-process-gone", (_event, details) => {
+    this.settingsWindow.webContents.on("render-process-gone", (_event, details) => {
       if (details.reason === "crashed" || details.reason === "killed" || details.reason === "oom") {
         debugLogger.error(
-          "Control panel renderer process gone",
+          "Settings window renderer process gone",
           { reason: details.reason, exitCode: details.exitCode },
           "window"
         );
-        setTimeout(() => this.loadControlPanel(), 1000);
+        setTimeout(() => this.loadSettingsWindow(), 1000);
       }
     });
 
-    this.controlPanelWindow.on("show", () => {
-      if (this.controlPanelWindow.webContents.isCrashed()) {
-        debugLogger.error("Control panel crashed, reloading on show", undefined, "window");
-        this.loadControlPanel();
+    this.settingsWindow.on("show", () => {
+      if (this.settingsWindow.webContents.isCrashed()) {
+        debugLogger.error("Settings window crashed, reloading on show", undefined, "window");
+        this.loadSettingsWindow();
       }
     });
 
-    await this.loadControlPanel();
+    await this.loadSettingsWindow();
   }
 
-  async loadControlPanel() {
-    await this.loadWindowContent(this.controlPanelWindow, true);
+  async loadSettingsWindow() {
+    await this.loadWindowContent(this.settingsWindow, true);
+  }
+
+  async openSettingsWindow() {
+    await this.createSettingsWindow();
   }
 
   showDictationPanel(options = {}) {
@@ -620,12 +621,12 @@ class WindowManager {
     }
   }
 
-  hideControlPanelToTray() {
-    if (!this.controlPanelWindow || this.controlPanelWindow.isDestroyed()) {
+  hideSettingsWindow() {
+    if (!this.settingsWindow || this.settingsWindow.isDestroyed()) {
       return;
     }
 
-    this.controlPanelWindow.hide();
+    this.settingsWindow.hide();
 
     if (process.platform === "darwin" && app.dock) {
       app.dock.hide();
@@ -703,13 +704,13 @@ class WindowManager {
   refreshLocalizedUi() {
     MenuManager.setupMainMenu();
 
-    if (this.controlPanelWindow && !this.controlPanelWindow.isDestroyed()) {
-      MenuManager.setupControlPanelMenu(this.controlPanelWindow);
-      this.controlPanelWindow.setTitle(i18nMain.t("window.controlPanelTitle"));
+    if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
+      MenuManager.setupSettingsWindowMenu(this.settingsWindow);
+      this.settingsWindow.setTitle("NOTYPE Settings");
     }
 
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      this.mainWindow.setTitle(i18nMain.t("window.voiceRecorderTitle"));
+      this.mainWindow.setTitle("NOTYPE");
     }
   }
 

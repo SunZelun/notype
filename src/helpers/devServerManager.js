@@ -54,9 +54,9 @@ class DevServerManager {
     return false;
   }
 
-  static getAppUrl(isControlPanel = false) {
+  static getAppUrl(isSettingsWindow = false) {
     if (process.env.NODE_ENV === "development") {
-      return isControlPanel ? `${DEV_SERVER_URL}?panel=true` : DEV_SERVER_URL;
+      return isSettingsWindow ? `${DEV_SERVER_URL}?settings=1` : DEV_SERVER_URL;
     } else {
       // For production, return null - caller should use loadFile() instead
       return null;
@@ -66,10 +66,10 @@ class DevServerManager {
   /**
    * Get the path to the index.html file for production builds.
    * In Electron 36+, loadFile() is preferred over loadURL() with file:// protocol.
-   * @param {boolean} isControlPanel - Whether this is for the control panel
+   * @param {boolean} isSettingsWindow - Whether this is for the settings window
    * @returns {{ path: string, query: object } | null} - Path info for loadFile() or null for dev
    */
-  static getAppFilePath(isControlPanel = false) {
+  static getAppFilePath(isSettingsWindow = false) {
     if (process.env.NODE_ENV === "development") {
       return null; // Use getAppUrl() for dev server
     }
@@ -83,7 +83,7 @@ class DevServerManager {
 
     return {
       path: htmlPath,
-      query: isControlPanel ? { panel: "true" } : {},
+      query: isSettingsWindow ? { settings: "1" } : {},
     };
   }
 }

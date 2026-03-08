@@ -1,4 +1,5 @@
 const { ipcMain, app, shell, BrowserWindow } = require("electron");
+const { execFile } = require("child_process");
 const path = require("path");
 const http = require("http");
 const https = require("https");
@@ -27,7 +28,7 @@ const AUDIO_MIME_TYPES = {
 };
 
 function buildMultipartBody(fileBuffer, fileName, contentType, fields = {}) {
-  const boundary = `----OpenWhispr${Date.now()}`;
+  const boundary = `----NOTYPE${Date.now()}`;
   const parts = [];
 
   parts.push(
@@ -87,6 +88,60 @@ function postMultipart(url, body, boundary, headers = {}) {
   });
 }
 
+function runMacOsJavascript(script) {
+  return new Promise((resolve, reject) => {
+    execFile("osascript", ["-l", "JavaScript", "-e", script], { timeout: 2000 }, (error, stdout) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve(stdout.trim());
+    });
+  });
+}
+
+function buildMacOsContextScript(targetPid = null) {
+  const requestedPid = Number.isInteger(targetPid) ? targetPid : null;
+  const pidLiteral = requestedPid === null ? "null" : String(requestedPid);
+
+  return [
+    'ObjC.import("AppKit");',
+    `const requestedPid = ${pidLiteral};`,
+    "const workspace = $.NSWorkspace.sharedWorkspace;",
+    "const app = requestedPid !== null ? $.NSRunningApplication.runningApplicationWithProcessIdentifier(requestedPid) : workspace.frontmostApplication;",
+    'const appName = app && app.localizedName ? ObjC.unwrap(app.localizedName) : "";',
+    'const bundleId = app && app.bundleIdentifier ? ObjC.unwrap(app.bundleIdentifier) : "";',
+    "let windowTitle = '';",
+    "try {",
+    "  const systemEvents = Application('System Events');",
+    "  const targetProcess = appName",
+    "    ? systemEvents.applicationProcesses.byName(appName)",
+    "    : systemEvents.applicationProcesses.whose({ frontmost: true })[0];",
+    "  if (targetProcess) {",
+    "    const windows = typeof targetProcess.windows === 'function' ? targetProcess.windows() : [];",
+    "    if (windows && windows.length > 0) {",
+    "      const titleValue = typeof windows[0].name === 'function' ? windows[0].name() : '';",
+    "      windowTitle = titleValue ? String(titleValue) : '';",
+    "    }",
+    "  }",
+    "} catch (_error) {}",
+    "JSON.stringify({ appName, bundleId, windowTitle });",
+  ].join("\n");
+}
+
+async function getActiveAppMetadata(targetPid = null) {
+  if (process.platform !== "darwin") {
+    return { appName: "", bundleId: "", windowTitle: "" };
+  }
+
+  try {
+    const output = await runMacOsJavascript(buildMacOsContextScript(targetPid));
+    return JSON.parse(output || "{}");
+  } catch {
+    return { appName: "", bundleId: "", windowTitle: "" };
+  }
+}
+
 class IPCHandlers {
   constructor(managers) {
     this.environmentManager = managers.environmentManager;
@@ -103,7 +158,8 @@ class IPCHandlers {
     this.sessionId = crypto.randomUUID();
     this.assemblyAiStreaming = null;
     this.deepgramStreaming = null;
-    this._autoLearnEnabled = true; // Default on, synced from renderer
+    // NOTYPE keeps post-paste correction learning off by default in the MVP.
+    this._autoLearnEnabled = false;
     this._autoLearnDebounceTimer = null;
     this._autoLearnLatestData = null;
     this._textEditHandler = null;
@@ -266,30 +322,30 @@ class IPCHandlers {
 
   setupHandlers() {
     ipcMain.handle("window-minimize", () => {
-      if (this.windowManager.controlPanelWindow) {
-        this.windowManager.controlPanelWindow.minimize();
+      if (this.windowManager.settingsWindow) {
+        this.windowManager.settingsWindow.minimize();
       }
     });
 
     ipcMain.handle("window-maximize", () => {
-      if (this.windowManager.controlPanelWindow) {
-        if (this.windowManager.controlPanelWindow.isMaximized()) {
-          this.windowManager.controlPanelWindow.unmaximize();
+      if (this.windowManager.settingsWindow) {
+        if (this.windowManager.settingsWindow.isMaximized()) {
+          this.windowManager.settingsWindow.unmaximize();
         } else {
-          this.windowManager.controlPanelWindow.maximize();
+          this.windowManager.settingsWindow.maximize();
         }
       }
     });
 
     ipcMain.handle("window-close", () => {
-      if (this.windowManager.controlPanelWindow) {
-        this.windowManager.controlPanelWindow.close();
+      if (this.windowManager.settingsWindow) {
+        this.windowManager.settingsWindow.close();
       }
     });
 
     ipcMain.handle("window-is-maximized", () => {
-      if (this.windowManager.controlPanelWindow) {
-        return this.windowManager.controlPanelWindow.isMaximized();
+      if (this.windowManager.settingsWindow) {
+        return this.windowManager.settingsWindow.isMaximized();
       }
       return false;
     });
@@ -309,6 +365,15 @@ class IPCHandlers {
 
     ipcMain.handle("show-dictation-panel", () => {
       this.windowManager.showDictationPanel();
+    });
+
+    ipcMain.handle("open-settings-window", () => {
+      this.windowManager.openSettingsWindow?.();
+      return { success: true };
+    });
+
+    ipcMain.handle("get-active-app-metadata", async () => {
+      return getActiveAppMetadata(this.textEditMonitor?.lastTargetPid ?? null);
     });
 
     ipcMain.handle("force-stop-dictation", () => {
@@ -501,179 +566,6 @@ class IPCHandlers {
       }
     });
 
-    ipcMain.handle(
-      "db-save-note",
-      async (event, title, content, noteType, sourceFile, audioDuration, folderId) => {
-        const result = this.databaseManager.saveNote(
-          title,
-          content,
-          noteType,
-          sourceFile,
-          audioDuration,
-          folderId
-        );
-        if (result?.success && result?.note) {
-          setImmediate(() => {
-            this.broadcastToWindows("note-added", result.note);
-          });
-        }
-        return result;
-      }
-    );
-
-    ipcMain.handle("db-get-note", async (event, id) => {
-      return this.databaseManager.getNote(id);
-    });
-
-    ipcMain.handle("db-get-notes", async (event, noteType, limit, folderId) => {
-      return this.databaseManager.getNotes(noteType, limit, folderId);
-    });
-
-    ipcMain.handle("db-update-note", async (event, id, updates) => {
-      const result = this.databaseManager.updateNote(id, updates);
-      if (result?.success && result?.note) {
-        setImmediate(() => {
-          this.broadcastToWindows("note-updated", result.note);
-        });
-      }
-      return result;
-    });
-
-    ipcMain.handle("db-delete-note", async (event, id) => {
-      const result = this.databaseManager.deleteNote(id);
-      if (result?.success) {
-        setImmediate(() => {
-          this.broadcastToWindows("note-deleted", { id });
-        });
-      }
-      return result;
-    });
-
-    ipcMain.handle("db-search-notes", async (event, query, limit) => {
-      return this.databaseManager.searchNotes(query, limit);
-    });
-
-    ipcMain.handle("db-update-note-cloud-id", async (event, id, cloudId) => {
-      return this.databaseManager.updateNoteCloudId(id, cloudId);
-    });
-
-    ipcMain.handle("db-get-folders", async () => {
-      return this.databaseManager.getFolders();
-    });
-
-    ipcMain.handle("db-create-folder", async (event, name) => {
-      const result = this.databaseManager.createFolder(name);
-      if (result?.success && result?.folder) {
-        setImmediate(() => {
-          this.broadcastToWindows("folder-created", result.folder);
-        });
-      }
-      return result;
-    });
-
-    ipcMain.handle("db-delete-folder", async (event, id) => {
-      const result = this.databaseManager.deleteFolder(id);
-      if (result?.success) {
-        setImmediate(() => {
-          this.broadcastToWindows("folder-deleted", { id });
-        });
-      }
-      return result;
-    });
-
-    ipcMain.handle("db-rename-folder", async (event, id, name) => {
-      const result = this.databaseManager.renameFolder(id, name);
-      if (result?.success && result?.folder) {
-        setImmediate(() => {
-          this.broadcastToWindows("folder-renamed", result.folder);
-        });
-      }
-      return result;
-    });
-
-    ipcMain.handle("db-get-folder-note-counts", async () => {
-      return this.databaseManager.getFolderNoteCounts();
-    });
-
-    ipcMain.handle("db-get-actions", async () => {
-      return this.databaseManager.getActions();
-    });
-
-    ipcMain.handle("db-get-action", async (event, id) => {
-      return this.databaseManager.getAction(id);
-    });
-
-    ipcMain.handle("db-create-action", async (event, name, description, prompt, icon) => {
-      const result = this.databaseManager.createAction(name, description, prompt, icon);
-      if (result?.success && result?.action) {
-        setImmediate(() => {
-          this.broadcastToWindows("action-created", result.action);
-        });
-      }
-      return result;
-    });
-
-    ipcMain.handle("db-update-action", async (event, id, updates) => {
-      const result = this.databaseManager.updateAction(id, updates);
-      if (result?.success && result?.action) {
-        setImmediate(() => {
-          this.broadcastToWindows("action-updated", result.action);
-        });
-      }
-      return result;
-    });
-
-    ipcMain.handle("db-delete-action", async (event, id) => {
-      const result = this.databaseManager.deleteAction(id);
-      if (result?.success) {
-        setImmediate(() => {
-          this.broadcastToWindows("action-deleted", { id });
-        });
-      }
-      return result;
-    });
-
-    ipcMain.handle("export-note", async (event, noteId, format) => {
-      try {
-        const note = this.databaseManager.getNote(noteId);
-        if (!note) return { success: false, error: "Note not found" };
-
-        const { dialog } = require("electron");
-        const fs = require("fs");
-        const ext = format === "txt" ? "txt" : "md";
-        const safeName = (note.title || "Untitled").replace(/[/\\?%*:|"<>]/g, "-");
-
-        const result = await dialog.showSaveDialog({
-          defaultPath: `${safeName}.${ext}`,
-          filters: [
-            { name: "Markdown", extensions: ["md"] },
-            { name: "Text", extensions: ["txt"] },
-          ],
-        });
-
-        if (result.canceled || !result.filePath) return { success: false };
-
-        let exportContent;
-        if (format === "txt") {
-          exportContent = (note.content || "")
-            .replace(/#{1,6}\s+/g, "")
-            .replace(/[*_~`]+/g, "")
-            .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-            .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
-            .replace(/^>\s+/gm, "")
-            .trim();
-        } else {
-          exportContent = note.enhanced_content || note.content;
-        }
-
-        fs.writeFileSync(result.filePath, exportContent, "utf-8");
-        return { success: true };
-      } catch (error) {
-        debugLogger.error("Error exporting note", { error: error.message }, "notes");
-        return { success: false, error: error.message };
-      }
-    });
-
     ipcMain.handle("select-audio-file", async () => {
       const { dialog } = require("electron");
       const result = await dialog.showOpenDialog({
@@ -730,29 +622,37 @@ class IPCHandlers {
           await new Promise((resolve) => setTimeout(resolve, 80));
         }
       }
-      const result = await this.clipboardManager.pasteText(text, {
-        ...options,
-        webContents: event.sender,
-      });
-      const targetPid = this.textEditMonitor?.lastTargetPid || null;
-      debugLogger.debug("[AutoLearn] Paste completed", {
-        autoLearnEnabled: this._autoLearnEnabled,
-        hasMonitor: !!this.textEditMonitor,
-        targetPid,
-      });
-      if (this.textEditMonitor && this._autoLearnEnabled) {
-        setTimeout(() => {
-          try {
-            debugLogger.debug("[AutoLearn] Starting monitoring", {
-              textPreview: text.substring(0, 80),
-            });
-            this.textEditMonitor.startMonitoring(text, 30000, { targetPid });
-          } catch (err) {
-            debugLogger.debug("[AutoLearn] Failed to start monitoring", { error: err.message });
-          }
-        }, 500);
+      try {
+        await this.clipboardManager.pasteText(text, {
+          ...options,
+          webContents: event.sender,
+        });
+        const targetPid = this.textEditMonitor?.lastTargetPid || null;
+        debugLogger.debug("[AutoLearn] Paste completed", {
+          autoLearnEnabled: this._autoLearnEnabled,
+          hasMonitor: !!this.textEditMonitor,
+          targetPid,
+        });
+        if (this.textEditMonitor && this._autoLearnEnabled) {
+          setTimeout(() => {
+            try {
+              debugLogger.debug("[AutoLearn] Starting monitoring", {
+                textPreview: text.substring(0, 80),
+              });
+              this.textEditMonitor.startMonitoring(text, 30000, { targetPid });
+            } catch (err) {
+              debugLogger.debug("[AutoLearn] Failed to start monitoring", { error: err.message });
+            }
+          }, 500);
+        }
+        return { success: true };
+      } catch (error) {
+        return {
+          success: false,
+          error: error?.message || String(error),
+          code: error?.code || "PASTE_FAILED",
+        };
       }
-      return result;
     });
 
     ipcMain.handle("check-accessibility-permission", async () => {
@@ -1861,24 +1761,6 @@ class IPCHandlers {
       return { granted };
     });
 
-    // Auth: clear all session cookies for sign-out.
-    // This clears every cookie in the renderer session rather than targeting
-    // individual auth cookies, which is acceptable because the app only sets
-    // cookies for Neon Auth. Avoids CSRF/Origin header issues that occur when
-    // the renderer tries to call the server-side sign-out endpoint directly.
-    ipcMain.handle("auth-clear-session", async (event) => {
-      try {
-        const win = BrowserWindow.fromWebContents(event.sender);
-        if (win) {
-          await win.webContents.session.clearStorageData({ storages: ["cookies"] });
-        }
-        return { success: true };
-      } catch (error) {
-        debugLogger.error("Failed to clear auth session:", error);
-        return { success: false, error: error.message };
-      }
-    });
-
     // In production, VITE_* env vars aren't available in the main process because
     // Vite only inlines them into the renderer bundle at build time. Load the
     // runtime-env.json that the Vite build writes to src/dist/ as a fallback.
@@ -2262,52 +2144,6 @@ class IPCHandlers {
       }
     });
 
-    const fetchStripeUrl = async (event, endpoint, errorPrefix, body) => {
-      try {
-        const apiUrl = getApiUrl();
-        if (!apiUrl) throw new Error("OpenWhispr API URL not configured");
-
-        const cookieHeader = await getSessionCookies(event);
-        if (!cookieHeader) throw new Error("No session cookies available");
-
-        const headers = { Cookie: cookieHeader };
-        const fetchOpts = { method: "POST", headers };
-        if (body) {
-          headers["Content-Type"] = "application/json";
-          fetchOpts.body = JSON.stringify(body);
-        }
-
-        const response = await fetch(`${apiUrl}${endpoint}`, fetchOpts);
-
-        if (!response.ok) {
-          if (response.status === 401) {
-            return { success: false, error: "Session expired", code: "AUTH_EXPIRED" };
-          }
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.error || `API error: ${response.status}`);
-        }
-
-        const data = await response.json();
-        return { success: true, url: data.url };
-      } catch (error) {
-        debugLogger.error(`${errorPrefix}: ${error.message}`);
-        return { success: false, error: error.message };
-      }
-    };
-
-    ipcMain.handle("cloud-checkout", (event, plan) =>
-      fetchStripeUrl(
-        event,
-        "/api/stripe/checkout",
-        "Cloud checkout error",
-        plan ? { plan } : undefined
-      )
-    );
-
-    ipcMain.handle("cloud-billing-portal", (event) =>
-      fetchStripeUrl(event, "/api/stripe/portal", "Cloud billing portal error")
-    );
-
     ipcMain.handle("get-stt-config", async (event) => {
       try {
         const apiUrl = getApiUrl();
@@ -2566,110 +2402,6 @@ class IPCHandlers {
         }
       }
     );
-
-    ipcMain.handle("get-referral-stats", async (event) => {
-      try {
-        const apiUrl = getApiUrl();
-        if (!apiUrl) {
-          throw new Error("OpenWhispr API URL not configured");
-        }
-
-        const cookieHeader = await getSessionCookies(event);
-        if (!cookieHeader) {
-          throw new Error("No session cookies available");
-        }
-
-        const response = await fetch(`${apiUrl}/api/referrals/stats`, {
-          headers: {
-            Cookie: cookieHeader,
-          },
-        });
-
-        if (!response.ok) {
-          if (response.status === 401) {
-            throw new Error("Unauthorized - please sign in");
-          }
-          throw new Error(`Failed to fetch referral stats: ${response.status}`);
-        }
-
-        const data = await response.json();
-        return data;
-      } catch (error) {
-        debugLogger.error("Error fetching referral stats:", error);
-        throw error;
-      }
-    });
-
-    ipcMain.handle("send-referral-invite", async (event, email) => {
-      try {
-        const apiUrl = getApiUrl();
-        if (!apiUrl) {
-          throw new Error("OpenWhispr API URL not configured");
-        }
-
-        const cookieHeader = await getSessionCookies(event);
-        if (!cookieHeader) {
-          throw new Error("No session cookies available");
-        }
-
-        const response = await fetch(`${apiUrl}/api/referrals/invite`, {
-          method: "POST",
-          headers: {
-            Cookie: cookieHeader,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ email }),
-        });
-
-        if (!response.ok) {
-          let errorMessage = `Failed to send invite: ${response.status}`;
-          try {
-            const errorData = await response.json();
-            if (errorData.error) errorMessage = errorData.error;
-          } catch (_) {}
-          throw new Error(errorMessage);
-        }
-
-        const data = await response.json();
-        return data;
-      } catch (error) {
-        debugLogger.error("Error sending referral invite:", error);
-        throw error;
-      }
-    });
-
-    ipcMain.handle("get-referral-invites", async (event) => {
-      try {
-        const apiUrl = getApiUrl();
-        if (!apiUrl) {
-          throw new Error("OpenWhispr API URL not configured");
-        }
-
-        const cookieHeader = await getSessionCookies(event);
-        if (!cookieHeader) {
-          throw new Error("No session cookies available");
-        }
-
-        const response = await fetch(`${apiUrl}/api/referrals/invites`, {
-          headers: {
-            Cookie: cookieHeader,
-          },
-        });
-
-        if (!response.ok) {
-          if (response.status === 401) {
-            throw new Error("Unauthorized - please sign in");
-          }
-          throw new Error(`Failed to fetch referral invites: ${response.status}`);
-        }
-
-        const data = await response.json();
-        return data;
-      } catch (error) {
-        debugLogger.error("Error fetching referral invites:", error);
-        throw error;
-      }
-    });
 
     ipcMain.handle("open-whisper-models-folder", async () => {
       try {

@@ -3,7 +3,7 @@ const { autoUpdater } = require("electron-updater");
 class UpdateManager {
   constructor() {
     this.mainWindow = null;
-    this.controlPanelWindow = null;
+    this.settingsWindow = null;
     this.updateAvailable = false;
     this.updateDownloaded = false;
     this.lastUpdateInfo = null;
@@ -14,9 +14,9 @@ class UpdateManager {
     this.setupAutoUpdater();
   }
 
-  setWindows(mainWindow, controlPanelWindow) {
+  setWindows(mainWindow, settingsWindow) {
     this.mainWindow = mainWindow;
-    this.controlPanelWindow = controlPanelWindow;
+    this.settingsWindow = settingsWindow;
   }
 
   setupAutoUpdater() {
@@ -141,12 +141,8 @@ class UpdateManager {
     if (this.mainWindow && !this.mainWindow.isDestroyed() && this.mainWindow.webContents) {
       this.mainWindow.webContents.send(channel, data);
     }
-    if (
-      this.controlPanelWindow &&
-      !this.controlPanelWindow.isDestroyed() &&
-      this.controlPanelWindow.webContents
-    ) {
-      this.controlPanelWindow.webContents.send(channel, data);
+    if (this.settingsWindow && !this.settingsWindow.isDestroyed() && this.settingsWindow.webContents) {
+      this.settingsWindow.webContents.send(channel, data);
     }
   }
 

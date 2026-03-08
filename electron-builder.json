@@ -1,9 +1,9 @@
 {
-  "appId": "com.herotools.openwispr",
-  "productName": "OpenWhispr",
+  "appId": "com.notype.app",
+  "productName": "NOTYPE",
   "protocols": {
-    "name": "OpenWhispr Protocol",
-    "schemes": ["openwhispr"]
+    "name": "NOTYPE Protocol",
+    "schemes": ["notype"]
   },
   "directories": {
     "output": "dist"
@@ -26,7 +26,6 @@
     "src/utils.js",
     "src/utils/**/*",
     "src/updater.js",
-    "src/components.json",
     "!node_modules/.cache/**/*",
     "!src/node_modules/**/*",
 
@@ -53,8 +52,6 @@
     "!**/node_modules/rollup/**",
     "!**/node_modules/@rollup/**",
 
-    "!**/node_modules/postcss/**",
-    "!**/node_modules/autoprefixer/**",
     "!**/node_modules/tailwindcss/**",
     "!**/node_modules/@tailwindcss/**",
     "!**/node_modules/lightningcss*/**",
@@ -62,13 +59,8 @@
     "!**/node_modules/react/**",
     "!**/node_modules/react-dom/**",
     "!**/node_modules/lucide-react/**",
-    "!**/node_modules/@radix-ui/**",
-    "!**/node_modules/class-variance-authority/**",
     "!**/node_modules/clsx/**",
     "!**/node_modules/tailwind-merge/**",
-    "!**/node_modules/tw-animate-css/**",
-    "!**/node_modules/react-markdown/**",
-    "!**/node_modules/shadcn-ui/**",
 
     "!**/node_modules/@types/**",
     "!**/node_modules/concurrently/**",
@@ -115,12 +107,11 @@
     "hardenedRuntime": true,
     "entitlements": "resources/mac/entitlements.mac.plist",
     "entitlementsInherit": "resources/mac/entitlements.mac.plist",
-    "identity": "HeroTools Inc. (9R85XFMH59)",
     "notarize": true,
     "extendInfo": {
       "LSUIElement": false,
-      "NSMicrophoneUsageDescription": "OpenWhispr needs microphone access for speech-to-text transcription.",
-      "NSAccessibilityUsageDescription": "OpenWhispr needs accessibility permissions to paste transcribed text into other applications."
+      "NSMicrophoneUsageDescription": "NOTYPE needs microphone access for speech-to-text transcription.",
+      "NSAccessibilityUsageDescription": "NOTYPE needs accessibility permissions to paste transcribed text into other applications."
     }
   },
   "win": {
@@ -190,7 +181,7 @@
     "include": "resources/nsis/cleanup-models.nsh"
   },
   "dmg": {
-    "title": "OpenWhispr",
+    "title": "NOTYPE",
     "icon": "src/assets/icon.icns",
     "window": {
       "width": 540,
@@ -199,8 +190,8 @@
   },
   "publish": {
     "provider": "github",
-    "owner": "OpenWhispr",
-    "repo": "openwhispr",
+    "owner": "SunZelun",
+    "repo": "notype",
     "private": false,
     "releaseType": "draft"
   }

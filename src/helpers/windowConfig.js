@@ -16,7 +16,7 @@ const WINDOW_SIZES = {
 const MAIN_WINDOW_CONFIG = {
   width: WINDOW_SIZES.BASE.width,
   height: WINDOW_SIZES.BASE.height,
-  title: "Voice Recorder",
+  title: "NOTYPE",
   webPreferences: {
     preload: path.join(__dirname, "..", "..", "preload.js"),
     nodeIntegration: false,
@@ -44,11 +44,11 @@ const MAIN_WINDOW_CONFIG = {
         : "normal",
 };
 
-// Control panel window configuration
-const CONTROL_PANEL_CONFIG = {
-  width: 1200,
-  height: 800,
-  backgroundColor: "#1c1c2e",
+// Settings window configuration
+const SETTINGS_WINDOW_CONFIG = {
+  width: 980,
+  height: 760,
+  backgroundColor: "#f8fafc",
   webPreferences: {
     preload: path.join(__dirname, "..", "..", "preload.js"),
     nodeIntegration: false,
@@ -58,13 +58,12 @@ const CONTROL_PANEL_CONFIG = {
     sandbox: false,
     // webSecurity: false disables same-origin policy. Required because in
     // production the renderer loads from a file:// origin but makes
-    // cross-origin fetch calls to Neon Auth, Gemini, OpenAI, and Groq APIs
-    // directly from the browser. These would be blocked by CORS otherwise.
+    // direct cross-origin requests to the configured STT / cleanup APIs.
     webSecurity: false,
     spellcheck: false,
     backgroundThrottling: false,
   },
-  title: "Control Panel",
+  title: "NOTYPE Settings",
   resizable: true,
   show: false,
   frame: false,
@@ -131,7 +130,7 @@ class WindowPositionUtil {
 
 module.exports = {
   MAIN_WINDOW_CONFIG,
-  CONTROL_PANEL_CONFIG,
+  SETTINGS_WINDOW_CONFIG,
   WINDOW_SIZES,
   WindowPositionUtil,
 };

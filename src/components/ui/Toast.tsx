@@ -138,8 +138,8 @@ const ToastViewport: React.FC<{
 }> = ({ toasts, onDismiss, onPauseTimer, onResumeTimer }) => {
   const isDictationPanel = React.useMemo(() => {
     return (
-      window.location.pathname.indexOf("control") === -1 &&
-      window.location.search.indexOf("panel=true") === -1
+      window.location.pathname.indexOf("settings") === -1 &&
+      window.location.search.indexOf("settings=1") === -1
     );
   }, []);
 

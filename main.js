@@ -1,16 +1,9 @@
-const { app, globalShortcut, BrowserWindow, dialog, ipcMain, session } = require("electron");
+const { app, globalShortcut, BrowserWindow, dialog, ipcMain } = require("electron");
 const path = require("path");
-const http = require("http");
 require("dotenv").config({ path: path.join(__dirname, ".env") });
 
 const VALID_CHANNELS = new Set(["development", "staging", "production"]);
-const DEFAULT_OAUTH_PROTOCOL_BY_CHANNEL = {
-  development: "openwhispr-dev",
-  staging: "openwhispr-staging",
-  production: "openwhispr",
-};
-const BASE_WINDOWS_APP_ID = "com.herotools.openwispr";
-const DEFAULT_AUTH_BRIDGE_PORT = 5199;
+const BASE_WINDOWS_APP_ID = "com.notype.app";
 
 function isElectronBinaryExec() {
   const execPath = (process.execPath || "").toLowerCase();
@@ -48,7 +41,7 @@ function configureChannelUserDataPath() {
     return;
   }
 
-  const isolatedPath = path.join(app.getPath("appData"), `OpenWhispr-${APP_CHANNEL}`);
+  const isolatedPath = path.join(app.getPath("appData"), `NOTYPE-${APP_CHANNEL}`);
   app.setPath("userData", isolatedPath);
 }
 
@@ -84,45 +77,6 @@ if (process.platform === "win32") {
   app.setAppUserModelId(windowsAppId);
 }
 
-function getOAuthProtocol() {
-  const fromEnv = (process.env.VITE_OPENWHISPR_PROTOCOL || process.env.OPENWHISPR_PROTOCOL || "")
-    .trim()
-    .toLowerCase();
-
-  if (/^[a-z][a-z0-9+.-]*$/.test(fromEnv)) {
-    return fromEnv;
-  }
-
-  return (
-    DEFAULT_OAUTH_PROTOCOL_BY_CHANNEL[APP_CHANNEL] || DEFAULT_OAUTH_PROTOCOL_BY_CHANNEL.production
-  );
-}
-
-const OAUTH_PROTOCOL = getOAuthProtocol();
-
-function shouldRegisterProtocolWithAppArg() {
-  return Boolean(process.defaultApp) || isElectronBinaryExec();
-}
-
-// Register custom protocol for OAuth callbacks.
-// In development, always include the app path argument so macOS/Windows/Linux
-// can launch the project app instead of opening bare Electron.
-function registerOpenWhisprProtocol() {
-  const protocol = OAUTH_PROTOCOL;
-
-  if (shouldRegisterProtocolWithAppArg()) {
-    const appArg = process.argv[1] ? path.resolve(process.argv[1]) : path.resolve(".");
-    return app.setAsDefaultProtocolClient(protocol, process.execPath, [appArg]);
-  }
-
-  return app.setAsDefaultProtocolClient(protocol);
-}
-
-const protocolRegistered = registerOpenWhisprProtocol();
-if (!protocolRegistered) {
-  console.warn(`[Auth] Failed to register ${OAUTH_PROTOCOL}:// protocol handler`);
-}
-
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
 if (!gotSingleInstanceLock) {
@@ -132,8 +86,8 @@ if (!gotSingleInstanceLock) {
 const isLiveWindow = (window) => window && !window.isDestroyed();
 
 // Ensure macOS menus use the proper casing for the app name
-if (process.platform === "darwin" && app.getName() !== "OpenWhispr") {
-  app.setName("OpenWhispr");
+if (process.platform === "darwin" && app.getName() !== "NOTYPE") {
+  app.setName("NOTYPE");
 }
 
 // Add global error handling for uncaught exceptions
@@ -186,23 +140,6 @@ let textEditMonitor = null;
 let whisperCudaManager = null;
 let ipcHandlers = null;
 let globeKeyAlertShown = false;
-let authBridgeServer = null;
-
-function parseAuthBridgePort() {
-  const raw = (process.env.OPENWHISPR_AUTH_BRIDGE_PORT || "").trim();
-  if (!raw) return DEFAULT_AUTH_BRIDGE_PORT;
-
-  const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
-    return DEFAULT_AUTH_BRIDGE_PORT;
-  }
-
-  return parsed;
-}
-
-const AUTH_BRIDGE_HOST = "127.0.0.1";
-const AUTH_BRIDGE_PORT = parseAuthBridgePort();
-const AUTH_BRIDGE_PATH = "/oauth/callback";
 
 // Set up PATH for production builds to find system tools (whisper.cpp, ffmpeg)
 function setupProductionPath() {
@@ -305,166 +242,10 @@ function initializeDeferredManagers() {
   }
 }
 
-app.on("open-url", (event, url) => {
-  event.preventDefault();
-  if (!url.startsWith(`${OAUTH_PROTOCOL}://`)) return;
-
-  handleOAuthDeepLink(url);
-
-  if (windowManager && isLiveWindow(windowManager.controlPanelWindow)) {
-    windowManager.controlPanelWindow.show();
-    windowManager.controlPanelWindow.focus();
-  }
-});
-
-// Extract the session verifier from the deep link and navigate the control
-// panel to its app URL with the verifier param so the Neon Auth SDK can
-// read it from window.location.search and complete authentication.
-function navigateControlPanelWithVerifier(verifier) {
-  if (!verifier) return;
-  if (!isLiveWindow(windowManager?.controlPanelWindow)) return;
-
-  const appUrl = DevServerManager.getAppUrl(true);
-
-  if (appUrl) {
-    const separator = appUrl.includes("?") ? "&" : "?";
-    const urlWithVerifier = `${appUrl}${separator}neon_auth_session_verifier=${encodeURIComponent(verifier)}`;
-    windowManager.controlPanelWindow.loadURL(urlWithVerifier);
-  } else {
-    const fileInfo = DevServerManager.getAppFilePath(true);
-    if (!fileInfo) return;
-    fileInfo.query.neon_auth_session_verifier = verifier;
-    windowManager.controlPanelWindow.loadFile(fileInfo.path, { query: fileInfo.query });
-  }
-
-  if (debugLogger) {
-    debugLogger.debug("Navigating control panel with OAuth verifier", {
-      appChannel: APP_CHANNEL,
-      oauthProtocol: OAUTH_PROTOCOL,
-    });
-  }
-  windowManager.controlPanelWindow.show();
-  windowManager.controlPanelWindow.focus();
-}
-
-function handleOAuthDeepLink(deepLinkUrl) {
-  try {
-    const parsed = new URL(deepLinkUrl);
-    const verifier = parsed.searchParams.get("neon_auth_session_verifier");
-    if (!verifier) return;
-    navigateControlPanelWithVerifier(verifier);
-  } catch (err) {
-    if (debugLogger) debugLogger.error("Failed to handle OAuth deep link:", err);
-  }
-}
-
-function parseJsonBody(req) {
-  return new Promise((resolve, reject) => {
-    let raw = "";
-    req.on("data", (chunk) => {
-      raw += chunk;
-      if (raw.length > 32 * 1024) {
-        reject(new Error("Request body too large"));
-        req.destroy();
-      }
-    });
-    req.on("end", () => {
-      if (!raw) return resolve({});
-      try {
-        resolve(JSON.parse(raw));
-      } catch {
-        reject(new Error("Invalid JSON payload"));
-      }
-    });
-    req.on("error", reject);
-  });
-}
-
-function writeCorsHeaders(res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-}
-
-function startAuthBridgeServer() {
-  if (APP_CHANNEL !== "development" || authBridgeServer) {
-    return;
-  }
-
-  authBridgeServer = http.createServer(async (req, res) => {
-    writeCorsHeaders(res);
-    if (req.method === "OPTIONS") {
-      res.writeHead(204);
-      res.end();
-      return;
-    }
-
-    const requestUrl = new URL(req.url || "/", `http://${AUTH_BRIDGE_HOST}:${AUTH_BRIDGE_PORT}`);
-    if (requestUrl.pathname !== AUTH_BRIDGE_PATH) {
-      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-      res.end("Not found");
-      return;
-    }
-
-    let verifier = requestUrl.searchParams.get("neon_auth_session_verifier");
-    if (!verifier && req.method === "POST") {
-      try {
-        const body = await parseJsonBody(req);
-        verifier = body?.neon_auth_session_verifier || body?.verifier || null;
-      } catch (error) {
-        res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
-        res.end(error.message || "Invalid request");
-        return;
-      }
-    }
-
-    if (!verifier) {
-      res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
-      res.end("Missing neon_auth_session_verifier");
-      return;
-    }
-
-    navigateControlPanelWithVerifier(verifier);
-
-    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    res.end(
-      "<html><body><h3>OpenWhispr sign-in complete.</h3><p>You can close this tab.</p></body></html>"
-    );
-  });
-
-  authBridgeServer.on("error", (error) => {
-    if (debugLogger) {
-      debugLogger.error("OAuth auth bridge server failed:", error);
-    }
-  });
-
-  authBridgeServer.listen(AUTH_BRIDGE_PORT, AUTH_BRIDGE_HOST, () => {
-    if (debugLogger) {
-      debugLogger.debug("OAuth auth bridge server started", {
-        url: `http://${AUTH_BRIDGE_HOST}:${AUTH_BRIDGE_PORT}${AUTH_BRIDGE_PATH}`,
-      });
-    }
-  });
-}
-
 // Main application startup
 async function startApp() {
   // Phase 1: Core managers + IPC handlers before windows
   initializeCoreManagers();
-  startAuthBridgeServer();
-
-  // Electron's file:// sends no Origin header, which Neon Auth rejects.
-  session.defaultSession.webRequest.onBeforeSendHeaders(
-    { urls: ["https://*.neon.tech/*"] },
-    (details, callback) => {
-      try {
-        details.requestHeaders["Origin"] = new URL(details.url).origin;
-      } catch {
-        /* malformed URL — leave Origin as-is */
-      }
-      callback({ requestHeaders: details.requestHeaders });
-    }
-  );
 
   windowManager.setActivationModeCache(environmentManager.getActivationMode());
   windowManager.setFloatingIconAutoHide(environmentManager.getFloatingIconAutoHide());
@@ -496,9 +277,8 @@ async function startApp() {
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
 
-  // Create windows FIRST so the user sees UI as soon as possible
+  // Create the floating dictation window first. The settings window opens on demand.
   await windowManager.createMainWindow();
-  await windowManager.createControlPanelWindow();
 
   // Phase 2: Initialize remaining managers after windows are visible
   initializeDeferredManagers();
@@ -533,12 +313,16 @@ async function startApp() {
     debugLogger.debug("Windows paste tool status", nircmdStatus);
   }
 
-  trayManager.setWindows(windowManager.mainWindow, windowManager.controlPanelWindow);
+  trayManager.setWindows(windowManager.mainWindow, windowManager.settingsWindow);
   trayManager.setWindowManager(windowManager);
-  trayManager.setCreateControlPanelCallback(() => windowManager.createControlPanelWindow());
+  trayManager.setCreateSettingsCallback(async () => {
+    await windowManager.openSettingsWindow();
+    trayManager.setWindows(windowManager.mainWindow, windowManager.settingsWindow);
+    updateManager.setWindows(windowManager.mainWindow, windowManager.settingsWindow);
+  });
   await trayManager.createTray();
 
-  updateManager.setWindows(windowManager.mainWindow, windowManager.controlPanelWindow);
+  updateManager.setWindows(windowManager.mainWindow, windowManager.settingsWindow);
   updateManager.checkForUpdatesOnStartup();
 
   if (process.platform === "darwin") {
@@ -558,9 +342,9 @@ async function startApp() {
         activationMode: mainWindowLive ? windowManager.getActivationMode() : "n/a",
       });
 
-      // Forward to control panel for hotkey capture
-      if (isLiveWindow(windowManager.controlPanelWindow)) {
-        windowManager.controlPanelWindow.webContents.send("globe-key-pressed");
+      // Forward to settings window for hotkey capture
+      if (isLiveWindow(windowManager.settingsWindow)) {
+        windowManager.settingsWindow.webContents.send("globe-key-pressed");
       }
 
       // Handle dictation if Globe/Fn is the current hotkey
@@ -601,9 +385,9 @@ async function startApp() {
     globeKeyManager.on("globe-up", async () => {
       debugLogger?.debug("[Globe] globe-up received", { wasRecording: globeKeyIsRecording });
 
-      // Forward to control panel for hotkey capture (Fn key released)
-      if (isLiveWindow(windowManager.controlPanelWindow)) {
-        windowManager.controlPanelWindow.webContents.send("globe-key-released");
+      // Forward to settings window for hotkey capture (Fn key released)
+      if (isLiveWindow(windowManager.settingsWindow)) {
+        windowManager.settingsWindow.webContents.send("globe-key-released");
       }
 
       if (hotkeyManager.getCurrentHotkey && isGlobeLikeHotkey(hotkeyManager.getCurrentHotkey())) {
@@ -805,13 +589,6 @@ async function startApp() {
   }
 }
 
-// Listen for usage limit reached from dictation overlay, forward to control panel
-ipcMain.on("limit-reached", (_event, data) => {
-  if (isLiveWindow(windowManager?.controlPanelWindow)) {
-    windowManager.controlPanelWindow.webContents.send("limit-reached", data);
-  }
-});
-
 // App event handlers
 if (gotSingleInstanceLock) {
   app.on("second-instance", async (_event, commandLine) => {
@@ -820,29 +597,23 @@ if (gotSingleInstanceLock) {
       return;
     }
 
-    if (isLiveWindow(windowManager.controlPanelWindow)) {
-      if (windowManager.controlPanelWindow.isMinimized()) {
-        windowManager.controlPanelWindow.restore();
+    if (isLiveWindow(windowManager.settingsWindow)) {
+      if (windowManager.settingsWindow.isMinimized()) {
+        windowManager.settingsWindow.restore();
       }
-      windowManager.controlPanelWindow.show();
-      windowManager.controlPanelWindow.focus();
-      if (windowManager.controlPanelWindow.webContents.isCrashed()) {
-        windowManager.loadControlPanel();
+      windowManager.settingsWindow.show();
+      windowManager.settingsWindow.focus();
+      if (windowManager.settingsWindow.webContents.isCrashed()) {
+        windowManager.loadSettingsWindow();
       }
     } else {
-      windowManager.createControlPanelWindow();
+      windowManager.openSettingsWindow();
     }
 
     if (isLiveWindow(windowManager.mainWindow)) {
       windowManager.enforceMainWindowOnTop();
     } else {
       windowManager.createMainWindow();
-    }
-
-    // Check for OAuth protocol URL in command line arguments (Windows/Linux)
-    const url = commandLine.find((arg) => arg.startsWith(`${OAUTH_PROTOCOL}://`));
-    if (url) {
-      handleOAuthDeepLink(url);
     }
   });
 
@@ -876,7 +647,7 @@ if (gotSingleInstanceLock) {
   });
 
   app.on("browser-window-focus", (event, window) => {
-    // Only apply always-on-top to the dictation window, not the control panel
+    // Only apply always-on-top to the dictation window, not the settings window
     if (windowManager && isLiveWindow(windowManager.mainWindow)) {
       // Check if the focused window is the dictation window
       if (window === windowManager.mainWindow) {
@@ -884,8 +655,7 @@ if (gotSingleInstanceLock) {
       }
     }
 
-    // Control panel doesn't need any special handling on focus
-    // It should behave like a normal window
+    // Settings behaves like a normal window.
   });
 
   app.on("activate", () => {
@@ -893,23 +663,22 @@ if (gotSingleInstanceLock) {
     if (BrowserWindow.getAllWindows().length === 0) {
       if (windowManager) {
         windowManager.createMainWindow();
-        windowManager.createControlPanelWindow();
+        windowManager.openSettingsWindow();
       }
     } else {
-      // Show control panel when dock icon is clicked (most common user action)
-      if (windowManager && isLiveWindow(windowManager.controlPanelWindow)) {
-        // Ensure dock icon is visible when control panel opens
+      // Show settings when the dock icon is clicked.
+      if (windowManager && isLiveWindow(windowManager.settingsWindow)) {
+        // Ensure dock icon is visible when settings opens
         if (process.platform === "darwin" && app.dock) {
           app.dock.show();
         }
-        if (windowManager.controlPanelWindow.isMinimized()) {
-          windowManager.controlPanelWindow.restore();
+        if (windowManager.settingsWindow.isMinimized()) {
+          windowManager.settingsWindow.restore();
         }
-        windowManager.controlPanelWindow.show();
-        windowManager.controlPanelWindow.focus();
+        windowManager.settingsWindow.show();
+        windowManager.settingsWindow.focus();
       } else if (windowManager) {
-        // If control panel doesn't exist, create it
-        windowManager.createControlPanelWindow();
+        windowManager.openSettingsWindow();
       }
 
       // Ensure dictation panel maintains its always-on-top status
@@ -920,10 +689,6 @@ if (gotSingleInstanceLock) {
   });
 
   app.on("will-quit", () => {
-    if (authBridgeServer) {
-      authBridgeServer.close();
-      authBridgeServer = null;
-    }
     if (hotkeyManager) {
       hotkeyManager.unregisterAll();
     } else {

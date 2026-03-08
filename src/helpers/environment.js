@@ -7,6 +7,7 @@ const { normalizeUiLanguage } = require("./i18nMain");
 const PERSISTED_KEYS = [
   "OPENAI_API_KEY",
   "ANTHROPIC_API_KEY",
+  "CEREBRAS_API_KEY",
   "GEMINI_API_KEY",
   "GROQ_API_KEY",
   "MISTRAL_API_KEY",
@@ -114,10 +115,11 @@ class EnvironmentManager {
   }
 
   getCustomReasoningKey() {
-    return this._getKey("CUSTOM_REASONING_API_KEY");
+    return this._getKey("CUSTOM_REASONING_API_KEY") || this._getKey("CEREBRAS_API_KEY");
   }
 
   saveCustomReasoningKey(key) {
+    this._saveKey("CEREBRAS_API_KEY", key);
     return this._saveKey("CUSTOM_REASONING_API_KEY", key);
   }
 
@@ -167,7 +169,7 @@ class EnvironmentManager {
   async createProductionEnvFile(apiKey) {
     const envPath = path.join(app.getPath("userData"), ".env");
 
-    const envContent = `# OpenWhispr Environment Variables
+    const envContent = `# NOTYPE Environment Variables
 # This file was created automatically for production use
 OPENAI_API_KEY=${apiKey}
 `;
@@ -181,7 +183,7 @@ OPENAI_API_KEY=${apiKey}
   async saveAllKeysToEnvFile() {
     const envPath = path.join(app.getPath("userData"), ".env");
 
-    let envContent = "# OpenWhispr Environment Variables\n";
+    let envContent = "# NOTYPE Environment Variables\n";
 
     for (const key of PERSISTED_KEYS) {
       if (process.env[key]) {

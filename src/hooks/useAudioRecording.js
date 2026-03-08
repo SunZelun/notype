@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
+import { DictationCoordinator } from "../domain/dictationCoordinator";
 import AudioManager from "../helpers/audioManager";
 import logger from "../utils/logger";
 import { playStartCue, playStopCue } from "../utils/dictationCues";
@@ -13,7 +14,9 @@ export const useAudioRecording = (toast, options = {}) => {
   const [isStreaming, setIsStreaming] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [partialTranscript, setPartialTranscript] = useState("");
+  const [audioLevel, setAudioLevel] = useState(0);
   const audioManagerRef = useRef(null);
+  const coordinatorRef = useRef(null);
   const startLockRef = useRef(false);
   const stopLockRef = useRef(false);
   const { onToggle } = options;
@@ -72,12 +75,20 @@ export const useAudioRecording = (toast, options = {}) => {
 
   useEffect(() => {
     audioManagerRef.current = new AudioManager();
+    coordinatorRef.current = new DictationCoordinator({
+      writeClipboard: (text) => window.electronAPI?.writeClipboard?.(text),
+      pasteText: (text, pasteOptions) => audioManagerRef.current?.safePaste(text, pasteOptions),
+      saveHistory: (text, rawText) => audioManagerRef.current?.saveTranscription(text, rawText),
+    });
 
     audioManagerRef.current.setCallbacks({
       onStateChange: ({ isRecording, isProcessing, isStreaming }) => {
         setIsRecording(isRecording);
         setIsProcessing(isProcessing);
         setIsStreaming(isStreaming ?? false);
+        if (!isRecording) {
+          setAudioLevel(0);
+        }
         if (!isStreaming) {
           setPartialTranscript("");
         }
@@ -97,74 +108,59 @@ export const useAudioRecording = (toast, options = {}) => {
       onPartialTranscript: (text) => {
         setPartialTranscript(text);
       },
+      onAudioLevel: (level) => {
+        setAudioLevel(Math.max(0, Math.min(1, level || 0)));
+      },
       onTranscriptionComplete: async (result) => {
         if (getSettings().pauseMediaOnDictation) {
           window.electronAPI?.resumeMediaPlayback?.();
         }
 
         if (result.success) {
-          const transcribedText = result.text?.trim();
+          const pasteStart = performance.now();
+          const handled = await coordinatorRef.current.handleTranscriptionResult(result, {});
 
-          if (!transcribedText) {
+          if (handled.skipped) {
             return;
           }
 
-          setTranscript(result.text);
+          setTranscript(handled.finalText);
 
-          const isStreaming = result.source?.includes("streaming");
-          const pasteStart = performance.now();
-          await audioManagerRef.current.safePaste(
-            result.text,
-            isStreaming ? { fromStreaming: true } : {}
-          );
-          logger.info(
-            "Paste timing",
-            {
-              pasteMs: Math.round(performance.now() - pasteStart),
-              source: result.source,
-              textLength: result.text.length,
-            },
-            "streaming"
-          );
+          if (handled.shouldAutoPaste) {
+            logger.info(
+              "Paste timing",
+              {
+                pasteMs: Math.round(performance.now() - pasteStart),
+                source: result.source,
+                textLength: handled.finalText.length,
+              },
+              "streaming"
+            );
+          }
 
-          audioManagerRef.current.saveTranscription(result.text, result.rawText ?? result.text);
-
-          if (result.source === "openai" && getSettings().useLocalWhisper) {
+          if (handled.showCleanupFailureToast) {
             toast({
-              title: t("hooks.audioRecording.fallback.title"),
-              description: t("hooks.audioRecording.fallback.description"),
+              title: "Cleanup unavailable",
+              description:
+                "Raw transcript copied to clipboard. Automatic paste was skipped for safety.",
               variant: "default",
             });
           }
 
-          // Cloud usage: limit reached after this transcription
-          if (result.source === "openwhispr" && result.limitReached) {
-            // Notify control panel to show UpgradePrompt dialog
-            window.electronAPI?.notifyLimitReached?.({
-              wordsUsed: result.wordsUsed,
-              limit:
-                result.wordsRemaining !== undefined
-                  ? result.wordsUsed + result.wordsRemaining
-                  : 2000,
+          if (!handled.historySaved) {
+            toast({
+              title: "History unavailable",
+              description:
+                handled.historyError ||
+                "Dictation completed, but the local history entry could not be saved.",
+              variant: "default",
             });
-          }
-
-          if (audioManagerRef.current.sttConfig?.dictation?.mode === "streaming") {
-            audioManagerRef.current.warmupStreamingConnection();
           }
         }
       },
     });
 
     audioManagerRef.current.setContext("dictation");
-    window.electronAPI.getSttConfig?.().then((config) => {
-      if (config && audioManagerRef.current) {
-        audioManagerRef.current.setSttConfig(config);
-        if (config.dictation?.mode === "streaming") {
-          audioManagerRef.current.warmupStreamingConnection();
-        }
-      }
-    });
 
     const handleToggle = async () => {
       if (!audioManagerRef.current) return;
@@ -263,6 +259,7 @@ export const useAudioRecording = (toast, options = {}) => {
     isRecording,
     isProcessing,
     isStreaming,
+    audioLevel,
     transcript,
     partialTranscript,
     startRecording,

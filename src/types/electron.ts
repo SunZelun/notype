@@ -12,43 +12,6 @@ export interface TranscriptionItem {
   model: string | null;
 }
 
-export interface NoteItem {
-  id: number;
-  title: string;
-  content: string;
-  enhanced_content: string | null;
-  enhancement_prompt: string | null;
-  enhanced_at_content_hash: string | null;
-  note_type: "personal" | "meeting" | "upload";
-  source_file: string | null;
-  audio_duration_seconds: number | null;
-  folder_id: number | null;
-  cloud_id: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface FolderItem {
-  id: number;
-  name: string;
-  is_default: number;
-  sort_order: number;
-  created_at: string;
-}
-
-export interface ActionItem {
-  id: number;
-  name: string;
-  description: string;
-  prompt: string;
-  icon: string;
-  is_builtin: number;
-  sort_order: number;
-  translation_key: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface GpuInfo {
   hasNvidiaGpu: boolean;
   gpuName?: string;
@@ -269,7 +232,10 @@ declare global {
   interface Window {
     electronAPI: {
       // Basic window operations
-      pasteText: (text: string, options?: { fromStreaming?: boolean }) => Promise<void>;
+      pasteText: (
+        text: string,
+        options?: { fromStreaming?: boolean }
+      ) => Promise<{ success: boolean; error?: string; code?: string }>;
       hideWindow: () => Promise<void>;
       showDictationPanel: () => Promise<void>;
       onToggleDictation: (callback: () => void) => () => void;
@@ -323,76 +289,6 @@ declare global {
       onCorrectionsLearned?: (callback: (words: string[]) => void) => () => void;
       undoLearnedCorrections?: (words: string[]) => Promise<{ success: boolean }>;
 
-      // Note operations
-      saveNote: (
-        title: string,
-        content: string,
-        noteType?: string,
-        sourceFile?: string | null,
-        audioDuration?: number | null,
-        folderId?: number | null
-      ) => Promise<{ success: boolean; note?: NoteItem }>;
-      getNote: (id: number) => Promise<NoteItem | null>;
-      getNotes: (
-        noteType?: string | null,
-        limit?: number,
-        folderId?: number | null
-      ) => Promise<NoteItem[]>;
-      updateNote: (
-        id: number,
-        updates: {
-          title?: string;
-          content?: string;
-          enhanced_content?: string | null;
-          enhancement_prompt?: string | null;
-          enhanced_at_content_hash?: string | null;
-          folder_id?: number | null;
-        }
-      ) => Promise<{ success: boolean; note?: NoteItem }>;
-      deleteNote: (id: number) => Promise<{ success: boolean }>;
-      exportNote: (
-        noteId: number,
-        format: "txt" | "md"
-      ) => Promise<{ success: boolean; error?: string }>;
-      searchNotes: (query: string, limit?: number) => Promise<NoteItem[]>;
-      updateNoteCloudId: (id: number, cloudId: string) => Promise<NoteItem>;
-
-      // Folder operations
-      getFolders: () => Promise<FolderItem[]>;
-      createFolder: (
-        name: string
-      ) => Promise<{ success: boolean; folder?: FolderItem; error?: string }>;
-      deleteFolder: (id: number) => Promise<{ success: boolean; error?: string }>;
-      renameFolder: (
-        id: number,
-        name: string
-      ) => Promise<{ success: boolean; folder?: FolderItem; error?: string }>;
-      getFolderNoteCounts: () => Promise<Array<{ folder_id: number; count: number }>>;
-
-      // Action operations
-      getActions: () => Promise<ActionItem[]>;
-      getAction: (id: number) => Promise<ActionItem | null>;
-      createAction: (
-        name: string,
-        description: string,
-        prompt: string,
-        icon?: string
-      ) => Promise<{ success: boolean; action?: ActionItem; error?: string }>;
-      updateAction: (
-        id: number,
-        updates: {
-          name?: string;
-          description?: string;
-          prompt?: string;
-          icon?: string;
-          sort_order?: number;
-        }
-      ) => Promise<{ success: boolean; action?: ActionItem; error?: string }>;
-      deleteAction: (id: number) => Promise<{ success: boolean; id?: number; error?: string }>;
-      onActionCreated?: (callback: (action: ActionItem) => void) => () => void;
-      onActionUpdated?: (callback: (action: ActionItem) => void) => () => void;
-      onActionDeleted?: (callback: (payload: { id: number }) => void) => () => void;
-
       // Audio file operations
       selectAudioFile: () => Promise<{ canceled: boolean; filePath?: string }>;
       getFileSize?: (filePath: string) => Promise<number>;
@@ -406,11 +302,6 @@ declare global {
         }
       ) => Promise<{ success: boolean; text?: string; error?: string }>;
       getPathForFile: (file: File) => string;
-
-      // Note event listeners
-      onNoteAdded?: (callback: (note: NoteItem) => void) => () => void;
-      onNoteUpdated?: (callback: (note: NoteItem) => void) => () => void;
-      onNoteDeleted?: (callback: (payload: { id: number }) => void) => () => void;
 
       // Database event listeners
       onTranscriptionAdded?: (callback: (item: TranscriptionItem) => void) => () => void;
@@ -700,10 +591,16 @@ declare global {
       openMicrophoneSettings?: () => Promise<{ success: boolean; error?: string }>;
       openSoundInputSettings?: () => Promise<{ success: boolean; error?: string }>;
       openAccessibilitySettings?: () => Promise<{ success: boolean; error?: string }>;
+      getActiveAppMetadata?: () => Promise<{
+        appName: string;
+        bundleId: string;
+        windowTitle: string;
+      }>;
       toggleMediaPlayback?: () => Promise<boolean>;
       pauseMediaPlayback?: () => Promise<boolean>;
       resumeMediaPlayback?: () => Promise<boolean>;
       openWhisperModelsFolder?: () => Promise<{ success: boolean; error?: string }>;
+      openSettingsWindow?: () => Promise<{ success: boolean; error?: string } | { success: true }>;
 
       // Windows Push-to-Talk notifications
       notifyActivationModeChanged?: (mode: "tap" | "push") => void;
@@ -715,9 +612,6 @@ declare global {
       // Auto-start at login
       getAutoStartEnabled?: () => Promise<boolean>;
       setAutoStartEnabled?: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
-
-      // Auth
-      authClearSession?: () => Promise<void>;
 
       // OpenWhispr Cloud API
       cloudTranscribe?: (
@@ -787,19 +681,6 @@ declare global {
         error?: string;
         code?: string;
       }>;
-      cloudCheckout?: (plan?: "monthly" | "annual") => Promise<{
-        success: boolean;
-        url?: string;
-        error?: string;
-        code?: string;
-      }>;
-      cloudBillingPortal?: () => Promise<{
-        success: boolean;
-        url?: string;
-        error?: string;
-        code?: string;
-      }>;
-
       // Cloud audio file transcription
       transcribeAudioFileCloud?: (filePath: string) => Promise<{
         success: boolean;
@@ -823,12 +704,6 @@ declare global {
         text?: string;
         error?: string;
       }>;
-
-      // Usage limit events
-      notifyLimitReached?: (data: { wordsUsed: number; limit: number }) => void;
-      onLimitReached?: (
-        callback: (data: { wordsUsed: number; limit: number }) => void
-      ) => () => void;
 
       // AssemblyAI Streaming
       assemblyAiStreamingWarmup?: (options?: {
@@ -863,46 +738,6 @@ declare global {
       onAssemblyAiSessionEnd?: (
         callback: (data: { audioDuration?: number; text?: string }) => void
       ) => () => void;
-
-      // Referral stats
-      getReferralStats?: () => Promise<{
-        referralCode: string;
-        referralLink: string;
-        totalReferrals: number;
-        completedReferrals: number;
-        pendingReferrals: number;
-        totalMonthsEarned: number;
-        referrals: Array<{
-          id: string;
-          email: string;
-          name: string;
-          status: "pending" | "completed" | "rewarded";
-          created_at: string;
-          first_payment_at: string | null;
-          words_used: number;
-        }>;
-      }>;
-
-      sendReferralInvite?: (email: string) => Promise<{
-        success: boolean;
-        invite: {
-          id: string;
-          recipientEmail: string;
-          status: "sent" | "failed" | "opened" | "converted";
-          sentAt: string;
-        };
-      }>;
-
-      getReferralInvites?: () => Promise<{
-        invites: Array<{
-          id: string;
-          recipientEmail: string;
-          status: "sent" | "failed" | "opened" | "converted";
-          sentAt: string;
-          openedAt?: string;
-          convertedAt?: string;
-        }>;
-      }>;
 
       // Deepgram Streaming
       deepgramStreamingWarmup?: (options?: { sampleRate?: number; language?: string }) => Promise<{

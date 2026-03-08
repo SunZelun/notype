@@ -1,23 +1,70 @@
 import { create } from "zustand";
 import { API_ENDPOINTS } from "../config/constants";
+import { getNotypeSettingsPatch } from "../domain/notypeDefaults";
 import i18n, { normalizeUiLanguage } from "../i18n";
-import { hasStoredByokKey } from "../utils/byokDetection";
 import { ensureAgentNameInDictionary } from "../utils/agentName";
 import logger from "../utils/logger";
 import type { LocalTranscriptionProvider } from "../types/electron";
-import type {
-  TranscriptionSettings,
-  ReasoningSettings,
-  HotkeySettings,
-  MicrophoneSettings,
-  ApiKeySettings,
-  PrivacySettings,
-  ThemeSettings,
-} from "../hooks/useSettings";
 
 let _ReasoningService: typeof import("../services/ReasoningService").default | null = null;
 
 const isBrowser = typeof window !== "undefined";
+
+export interface TranscriptionSettings {
+  uiLanguage: string;
+  useLocalWhisper: boolean;
+  whisperModel: string;
+  localTranscriptionProvider: LocalTranscriptionProvider;
+  parakeetModel: string;
+  allowOpenAIFallback: boolean;
+  allowLocalFallback: boolean;
+  fallbackWhisperModel: string;
+  preferredLanguage: string;
+  cloudTranscriptionProvider: string;
+  cloudTranscriptionModel: string;
+  cloudTranscriptionBaseUrl?: string;
+  cloudTranscriptionMode: string;
+  customDictionary: string[];
+  assemblyAiStreaming: boolean;
+}
+
+export interface ReasoningSettings {
+  useReasoningModel: boolean;
+  reasoningModel: string;
+  reasoningProvider: string;
+  cloudReasoningBaseUrl?: string;
+  cloudReasoningMode: string;
+}
+
+export interface HotkeySettings {
+  dictationKey: string;
+  activationMode: "tap" | "push";
+}
+
+export interface MicrophoneSettings {
+  preferBuiltInMic: boolean;
+  selectedMicDeviceId: string;
+}
+
+export interface ApiKeySettings {
+  openaiApiKey: string;
+  anthropicApiKey: string;
+  geminiApiKey: string;
+  groqApiKey: string;
+  mistralApiKey: string;
+  customTranscriptionApiKey: string;
+  customReasoningApiKey: string;
+}
+
+export interface PrivacySettings {
+  cloudBackupEnabled: boolean;
+  telemetryEnabled: boolean;
+  audioRetentionDays: number;
+}
+
+export interface ThemeSettings {
+  theme: "light" | "dark" | "auto";
+}
 
 function readString(key: string, fallback: string): string {
   if (!isBrowser) return fallback;
@@ -54,6 +101,7 @@ const BOOLEAN_SETTINGS = new Set([
   "cloudBackupEnabled",
   "telemetryEnabled",
   "audioCuesEnabled",
+  "autoPasteEnabled",
   "pauseMediaOnDictation",
   "floatingIconAutoHide",
   "isSignedIn",
@@ -86,6 +134,7 @@ export interface SettingsState
     ThemeSettings {
   isSignedIn: boolean;
   audioCuesEnabled: boolean;
+  autoPasteEnabled: boolean;
   pauseMediaOnDictation: boolean;
   floatingIconAutoHide: boolean;
   panelStartPosition: "bottom-right" | "center" | "bottom-left";
@@ -130,6 +179,7 @@ export interface SettingsState
   setTelemetryEnabled: (value: boolean) => void;
   setAudioRetentionDays: (days: number) => void;
   setAudioCuesEnabled: (value: boolean) => void;
+  setAutoPasteEnabled: (value: boolean) => void;
   setPauseMediaOnDictation: (value: boolean) => void;
   setFloatingIconAutoHide: (enabled: boolean) => void;
   setPanelStartPosition: (position: "bottom-right" | "center" | "bottom-left") => void;
@@ -152,6 +202,32 @@ function createBooleanSetter(key: string) {
     if (isBrowser) localStorage.setItem(key, String(value));
     useSettingsStore.setState({ [key]: value });
   };
+}
+
+function persistSettingValue(key: string, value: unknown) {
+  if (!isBrowser) return;
+
+  if (ARRAY_SETTINGS.has(key)) {
+    localStorage.setItem(key, JSON.stringify(Array.isArray(value) ? value : []));
+    return;
+  }
+
+  if (typeof value === "boolean") {
+    localStorage.setItem(key, String(value));
+    return;
+  }
+
+  if (typeof value === "number") {
+    localStorage.setItem(key, String(value));
+    return;
+  }
+
+  if (value == null) {
+    localStorage.removeItem(key);
+    return;
+  }
+
+  localStorage.setItem(key, String(value));
 }
 
 let envPersistTimer: ReturnType<typeof setTimeout> | null = null;
@@ -200,24 +276,18 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   allowLocalFallback: readBoolean("allowLocalFallback", false),
   fallbackWhisperModel: readString("fallbackWhisperModel", "base"),
   preferredLanguage: readString("preferredLanguage", "auto"),
-  cloudTranscriptionProvider: readString("cloudTranscriptionProvider", "openai"),
-  cloudTranscriptionModel: readString("cloudTranscriptionModel", "gpt-4o-mini-transcribe"),
-  cloudTranscriptionBaseUrl: readString(
-    "cloudTranscriptionBaseUrl",
-    API_ENDPOINTS.TRANSCRIPTION_BASE
-  ),
-  cloudTranscriptionMode: readString(
-    "cloudTranscriptionMode",
-    hasStoredByokKey() ? "byok" : "openwhispr"
-  ),
-  cloudReasoningMode: readString("cloudReasoningMode", "openwhispr"),
-  cloudReasoningBaseUrl: readString("cloudReasoningBaseUrl", API_ENDPOINTS.OPENAI_BASE),
+  cloudTranscriptionProvider: readString("cloudTranscriptionProvider", "groq"),
+  cloudTranscriptionModel: readString("cloudTranscriptionModel", "whisper-large-v3-turbo"),
+  cloudTranscriptionBaseUrl: readString("cloudTranscriptionBaseUrl", API_ENDPOINTS.GROQ_BASE),
+  cloudTranscriptionMode: readString("cloudTranscriptionMode", "byok"),
+  cloudReasoningMode: readString("cloudReasoningMode", "byok"),
+  cloudReasoningBaseUrl: readString("cloudReasoningBaseUrl", API_ENDPOINTS.CEREBRAS_BASE),
   customDictionary: readStringArray("customDictionary", []),
-  assemblyAiStreaming: readBoolean("assemblyAiStreaming", true),
+  assemblyAiStreaming: readBoolean("assemblyAiStreaming", false),
 
   useReasoningModel: readBoolean("useReasoningModel", true),
-  reasoningModel: readString("reasoningModel", ""),
-  reasoningProvider: readString("reasoningProvider", "openai"),
+  reasoningModel: readString("reasoningModel", "gpt-oss-120b"),
+  reasoningProvider: readString("reasoningProvider", "custom"),
 
   openaiApiKey: readString("openaiApiKey", ""),
   anthropicApiKey: readString("anthropicApiKey", ""),
@@ -232,7 +302,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
     | "tap"
     | "push",
 
-  preferBuiltInMic: readBoolean("preferBuiltInMic", true),
+  preferBuiltInMic: readBoolean("preferBuiltInMic", false),
   selectedMicDeviceId: readString("selectedMicDeviceId", ""),
 
   theme: (() => {
@@ -250,6 +320,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
     return isNaN(parsed) ? 30 : parsed;
   })(),
   audioCuesEnabled: readBoolean("audioCuesEnabled", true),
+  autoPasteEnabled: readBoolean("autoPasteEnabled", true),
   pauseMediaOnDictation: readBoolean("pauseMediaOnDictation", false),
   floatingIconAutoHide: readBoolean("floatingIconAutoHide", false),
   panelStartPosition: (() => {
@@ -384,6 +455,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
     set({ audioRetentionDays: days });
   },
   setAudioCuesEnabled: createBooleanSetter("audioCuesEnabled"),
+  setAutoPasteEnabled: createBooleanSetter("autoPasteEnabled"),
   setPauseMediaOnDictation: createBooleanSetter("pauseMediaOnDictation"),
 
   setFloatingIconAutoHide: (enabled: boolean) => {
@@ -615,6 +687,12 @@ export async function initializeSettings(): Promise<void> {
     }
 
     ensureAgentNameInDictionary();
+  }
+
+  const normalizedPatch = getNotypeSettingsPatch(useSettingsStore.getState());
+  if (Object.keys(normalizedPatch).length > 0) {
+    Object.entries(normalizedPatch).forEach(([key, value]) => persistSettingValue(key, value));
+    useSettingsStore.setState(normalizedPatch);
   }
 
   // Sync Zustand store when another window writes to localStorage

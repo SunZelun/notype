@@ -27,18 +27,21 @@ const SoundWaveIcon = ({ size = 16 }) => {
 };
 
 // Voice Wave Animation Component (for processing state)
-const VoiceWaveIndicator = ({ isListening }) => {
+const VoiceWaveIndicator = ({ level = 0, isActive = false }) => {
+  const normalized = Math.max(0, Math.min(1, level));
+  const bars = [0.65, 1.1, 1.5, 1.15, 0.8];
+
   return (
-    <div className="flex items-center justify-center gap-0.5">
-      {[...Array(4)].map((_, i) => (
+    <div className="flex h-5 items-end justify-center gap-[3px]">
+      {bars.map((multiplier, i) => (
         <div
           key={i}
-          className={`w-0.5 bg-white rounded-full transition-[height] duration-150 ${
-            isListening ? "animate-pulse h-4" : "h-2"
-          }`}
+          className="rounded-full bg-white/95 transition-[height,opacity,transform] duration-100 ease-out"
           style={{
-            animationDelay: isListening ? `${i * 0.1}s` : "0s",
-            animationDuration: isListening ? `${0.6 + i * 0.1}s` : "0s",
+            width: 3,
+            height: `${6 + normalized * multiplier * 10}px`,
+            opacity: isActive ? 0.95 : 0.55,
+            transform: `translateY(${isActive ? 0 : 1}px)`,
           }}
         />
       ))}
@@ -181,7 +184,7 @@ export default function App() {
     setWindowInteractivity(false);
   }, [setWindowInteractivity]);
 
-  const { isRecording, isProcessing, toggleListening, cancelRecording, cancelProcessing } =
+  const { isRecording, isProcessing, audioLevel, toggleListening, cancelRecording, cancelProcessing } =
     useAudioRecording(toast, {
       onToggle: handleDictationToggle,
     });
@@ -406,9 +409,9 @@ export default function App() {
               {micState === "idle" || micState === "hover" ? (
                 <SoundWaveIcon size={micState === "idle" ? 12 : 14} />
               ) : micState === "recording" ? (
-                <LoadingDots />
+                <VoiceWaveIndicator level={audioLevel} isActive={true} />
               ) : micState === "processing" ? (
-                <VoiceWaveIndicator isListening={true} />
+                <LoadingDots />
               ) : null}
 
               {/* State indicator ring for recording */}
@@ -444,6 +447,16 @@ export default function App() {
                 {isRecording
                   ? t("app.commandMenu.stopListening")
                   : t("app.commandMenu.startListening")}
+              </button>
+              <div className="h-px bg-border" />
+              <button
+                className="w-full px-3 py-2 text-left text-sm hover:bg-muted focus:bg-muted focus:outline-none"
+                onClick={async () => {
+                  setIsCommandMenuOpen(false);
+                  await window.electronAPI?.openSettingsWindow?.();
+                }}
+              >
+                Open settings
               </button>
               <div className="h-px bg-border" />
               <button

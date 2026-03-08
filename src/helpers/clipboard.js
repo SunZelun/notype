@@ -484,12 +484,12 @@ class ClipboardManager {
 
         this.safeLog("✅ Permissions granted, attempting to paste...");
         try {
-          await this.pasteMacOS(originalClipboard, options);
+          await this.pasteMacOS(options);
         } catch (firstError) {
           this.safeLog("⚠️ First paste attempt failed, retrying...", firstError?.message);
           clipboard.writeText(text);
           await new Promise((r) => setTimeout(r, 200));
-          await this.pasteMacOS(originalClipboard, options);
+          await this.pasteMacOS(options);
         }
       } else if (platform === "win32") {
         const winFastPaste = this.resolveWindowsFastPasteBinary();
@@ -521,7 +521,7 @@ class ClipboardManager {
     }
   }
 
-  async pasteMacOS(originalClipboard, options = {}) {
+  async pasteMacOS(options = {}) {
     const fastPasteBinary = this.resolveFastPasteBinary();
     const useFastPaste = !!fastPasteBinary;
     const pasteDelay = options.fromStreaming ? (useFastPaste ? 15 : 50) : PASTE_DELAYS.darwin;
@@ -549,9 +549,6 @@ class ClipboardManager {
 
           if (code === 0) {
             this.safeLog(`Text pasted successfully via ${useFastPaste ? "CGEvent" : "osascript"}`);
-            setTimeout(() => {
-              clipboard.writeText(originalClipboard);
-            }, RESTORE_DELAYS.darwin);
             resolve();
           } else if (useFastPaste) {
             this.safeLog(
@@ -561,7 +558,7 @@ class ClipboardManager {
             );
             this.fastPasteChecked = true;
             this.fastPastePath = null;
-            this.pasteMacOSWithOsascript(originalClipboard).then(resolve).catch(reject);
+            this.pasteMacOSWithOsascript().then(resolve).catch(reject);
           } else {
             this.accessibilityCache = { value: null, expiresAt: 0 };
             const errorMsg = `Paste failed (code ${code}). Text is copied to clipboard - please paste manually with Cmd+V.`;
@@ -578,7 +575,7 @@ class ClipboardManager {
             this.safeLog("CGEvent paste error, falling back to osascript");
             this.fastPasteChecked = true;
             this.fastPastePath = null;
-            this.pasteMacOSWithOsascript(originalClipboard).then(resolve).catch(reject);
+            this.pasteMacOSWithOsascript().then(resolve).catch(reject);
           } else {
             const errorMsg = `Paste command failed: ${error.message}. Text is copied to clipboard - please paste manually with Cmd+V.`;
             reject(new Error(errorMsg));
@@ -597,7 +594,7 @@ class ClipboardManager {
     });
   }
 
-  async pasteMacOSWithOsascript(originalClipboard) {
+  async pasteMacOSWithOsascript() {
     return new Promise((resolve, reject) => {
       const pasteProcess = spawn("osascript", [
         "-e",
@@ -613,9 +610,6 @@ class ClipboardManager {
 
         if (code === 0) {
           this.safeLog("Text pasted successfully via osascript fallback");
-          setTimeout(() => {
-            clipboard.writeText(originalClipboard);
-          }, RESTORE_DELAYS.darwin);
           resolve();
         } else {
           this.accessibilityCache = { value: null, expiresAt: 0 };
@@ -1450,17 +1444,17 @@ class ClipboardManager {
 
     let dialogMessage;
     if (isStuckPermission) {
-      dialogMessage = `🔒 OpenWhispr needs Accessibility permissions, but it looks like you may have OLD PERMISSIONS from a previous version.
+      dialogMessage = `🔒 NOTYPE needs Accessibility permissions, but it looks like you may have OLD PERMISSIONS from a previous version.
 
-❗ COMMON ISSUE: If you've rebuilt/reinstalled OpenWhispr, the old permissions may be "stuck" and preventing new ones.
+❗ COMMON ISSUE: If you've rebuilt/reinstalled NOTYPE, the old permissions may be "stuck" and preventing new ones.
 
 🔧 To fix this:
 1. Open System Settings → Privacy & Security → Accessibility
-2. Look for ANY old "OpenWhispr" entries and REMOVE them (click the - button)
+2. Look for ANY old "NOTYPE" entries and REMOVE them (click the - button)
 3. Also remove any entries that say "Electron" or have unclear names
-4. Click the + button and manually add the NEW OpenWhispr app
+4. Click the + button and manually add the NEW NOTYPE app
 5. Make sure the checkbox is enabled
-6. Restart OpenWhispr
+6. Restart NOTYPE
 
 ⚠️ This is especially common during development when rebuilding the app.
 
@@ -1468,7 +1462,7 @@ class ClipboardManager {
 
 Would you like to open System Settings now?`;
     } else {
-      dialogMessage = `🔒 OpenWhispr needs Accessibility permissions to paste text into other applications.
+      dialogMessage = `🔒 NOTYPE needs Accessibility permissions to paste text into other applications.
 
 📋 Current status: Clipboard copy works, but pasting (Cmd+V simulation) fails.
 
@@ -1476,8 +1470,8 @@ Would you like to open System Settings now?`;
 1. Open System Settings (or System Preferences on older macOS)
 2. Go to Privacy & Security → Accessibility
 3. Click the lock icon and enter your password
-4. Add OpenWhispr to the list and check the box
-5. Restart OpenWhispr
+4. Add NOTYPE to the list and check the box
+5. Restart NOTYPE
 
 ⚠️ Without this permission, dictated text will only be copied to clipboard but won't paste automatically.
 
@@ -1540,7 +1534,6 @@ Would you like to open System Settings now?`;
       return;
     }
     if (process.platform !== "darwin") return;
-    this.checkAccessibilityPermissions().catch(() => {});
     this.resolveFastPasteBinary();
   }
 

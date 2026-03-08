@@ -67,6 +67,7 @@ export const API_ENDPOINTS = {
   OPENAI: buildApiUrl(DEFAULT_OPENAI_BASE, "/responses"),
   OPENAI_MODELS: buildApiUrl(DEFAULT_OPENAI_BASE, "/models"),
   ANTHROPIC: "https://api.anthropic.com/v1/messages",
+  CEREBRAS_BASE: "https://api.cerebras.ai/v1",
   GEMINI: "https://generativelanguage.googleapis.com/v1beta",
   GROQ_BASE: "https://api.groq.com/openai/v1",
   MISTRAL_BASE: "https://api.mistral.ai/v1",
