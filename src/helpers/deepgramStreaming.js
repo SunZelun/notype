@@ -1,13 +1,15 @@
 const WebSocket = require("ws");
 const debugLogger = require("./debugLogger");
+const {
+  SAMPLE_RATE,
+  WEBSOCKET_TIMEOUT_MS,
+  TERMINATION_TIMEOUT_MS,
+  TOKEN_REFRESH_BUFFER_MS,
+  TOKEN_EXPIRY_MS,
+  REWARM_DELAY_MS,
+  MAX_REWARM_ATTEMPTS,
+} = require("./streamingConstants");
 
-const SAMPLE_RATE = 16000;
-const WEBSOCKET_TIMEOUT_MS = 30000;
-const TERMINATION_TIMEOUT_MS = 5000;
-const TOKEN_REFRESH_BUFFER_MS = 30000;
-const TOKEN_EXPIRY_MS = 300000;
-const REWARM_DELAY_MS = 2000;
-const MAX_REWARM_ATTEMPTS = 10;
 const KEEPALIVE_INTERVAL_MS = 3000;
 const COLD_START_BUFFER_MAX = 3 * SAMPLE_RATE * 2; // 3 seconds of 16-bit PCM
 const LIVENESS_TIMEOUT_MS = 2500; // Max wait for first Results from a warm connection

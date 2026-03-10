@@ -76,7 +76,11 @@
   ],
   "asarUnpack": ["**/node_modules/ffmpeg-static/**/*", "**/node_modules/better-sqlite3/**/*"],
   "extraResources": [
-    "src/assets/**/*",
+    {
+      "from": "src/assets/",
+      "to": "src/assets/",
+      "filter": ["**/*", "!*.md", "!*-source.*"]
+    },
     "resources/bin/macos-globe-listener",
     "resources/bin/macos-fast-paste",
     "resources/bin/macos-text-monitor",
@@ -102,7 +106,7 @@
   "mac": {
     "category": "public.app-category.productivity",
     "target": ["dmg", "zip"],
-    "icon": "AppIcons/appstore.png",
+    "icon": "src/assets/icon.icns",
     "gatekeeperAssess": false,
     "hardenedRuntime": true,
     "entitlements": "resources/mac/entitlements.mac.plist",
@@ -182,7 +186,7 @@
   },
   "dmg": {
     "title": "NOTYPE",
-    "icon": "AppIcons/appstore.png",
+    "icon": "src/assets/icon.icns",
     "window": {
       "width": 540,
       "height": 380

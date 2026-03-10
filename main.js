@@ -96,20 +96,10 @@ function setDockIcon() {
     return;
   }
 
-  const candidates = [
-    path.join(__dirname, "src", "assets", "icon.png"),
-    path.join(__dirname, "AppIcons", "appstore.png"),
-  ];
-
-  for (const candidate of candidates) {
-    try {
-      if (fs.existsSync(candidate)) {
-        app.dock.setIcon(candidate);
-        return;
-      }
-    } catch {
-      // Ignore dock icon errors and fall back to Electron's default.
-    }
+  try {
+    app.dock.setIcon(path.join(__dirname, "src", "assets", "icon.png"));
+  } catch {
+    // Ignore dock icon errors and fall back to Electron's default.
   }
 }
 

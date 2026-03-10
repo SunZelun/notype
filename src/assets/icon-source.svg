@@ -1,0 +1,58 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="plate" x1="176" y1="132" x2="846" y2="896" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#9DCAFF"/>
+      <stop offset="0.42" stop-color="#4F8FFF"/>
+      <stop offset="1" stop-color="#1C4DDE"/>
+    </linearGradient>
+    <linearGradient id="plateStroke" x1="210" y1="168" x2="810" y2="862" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#DCEBFF" stop-opacity="0.82"/>
+      <stop offset="1" stop-color="#B9D4FF" stop-opacity="0.28"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="272" y1="184" x2="592" y2="432" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.64"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(512 540) rotate(90) scale(260)">
+      <stop offset="0" stop-color="#D9E9FF" stop-opacity="0.68"/>
+      <stop offset="1" stop-color="#D9E9FF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="glass" x1="336" y1="292" x2="690" y2="760" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.94"/>
+      <stop offset="1" stop-color="#D8E8FF" stop-opacity="0.74"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="392" y1="362" x2="644" y2="656" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.94"/>
+      <stop offset="1" stop-color="#C8DEFF" stop-opacity="0.9"/>
+    </linearGradient>
+    <linearGradient id="glyph" x1="434" y1="392" x2="598" y2="650" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2E6BF6"/>
+      <stop offset="1" stop-color="#183FC6"/>
+    </linearGradient>
+    <filter id="plateShadow" x="76" y="76" width="872" height="896" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="10" stdDeviation="20" flood-color="#08153F" flood-opacity="0.22"/>
+      <feDropShadow dx="0" dy="32" stdDeviation="44" flood-color="#08153F" flood-opacity="0.18"/>
+    </filter>
+    <filter id="glassShadow" x="256" y="232" width="512" height="552" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="12" stdDeviation="22" flood-color="#0B2C82" flood-opacity="0.16"/>
+    </filter>
+  </defs>
+
+  <rect x="112" y="112" width="800" height="800" rx="184" fill="url(#plate)" filter="url(#plateShadow)"/>
+  <rect x="128" y="128" width="768" height="768" rx="170" fill="none" stroke="url(#plateStroke)" stroke-width="8"/>
+  <path d="M254 206C314 156 392 132 478 132H702C804 132 884 212 884 314V362C790 310 650 284 512 284C403 284 315 256 254 206Z" fill="url(#shine)"/>
+
+  <circle cx="512" cy="540" r="254" fill="url(#halo)"/>
+
+  <g filter="url(#glassShadow)">
+    <circle cx="512" cy="522" r="192" fill="url(#glass)"/>
+    <circle cx="512" cy="522" r="192" fill="none" stroke="#FFFFFF" stroke-opacity="0.42" stroke-width="8"/>
+    <path d="M368 386C408 350 460 328 516 328C578 328 640 356 684 402C624 380 568 370 510 370C454 370 408 376 368 386Z" fill="#FFFFFF" fill-opacity="0.26"/>
+    <circle cx="512" cy="522" r="144" fill="none" stroke="url(#ring)" stroke-width="24" stroke-linecap="round"/>
+
+    <rect x="424" y="446" width="42" height="152" rx="21" fill="url(#glyph)"/>
+    <rect x="491" y="392" width="42" height="260" rx="21" fill="url(#glyph)"/>
+    <rect x="558" y="446" width="42" height="152" rx="21" fill="url(#glyph)"/>
+    <path d="M410 420C444 382 494 358 548 358" fill="none" stroke="#FFFFFF" stroke-opacity="0.34" stroke-width="16" stroke-linecap="round"/>
+  </g>
+</svg>
