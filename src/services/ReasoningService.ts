@@ -7,8 +7,6 @@ import logger from "../utils/logger";
 import { isSecureEndpoint } from "../utils/urlUtils";
 import { getSettings, isCloudReasoningMode } from "../stores/settingsStore";
 
-const runCloudRequest = async <T>(operation: () => Promise<T>): Promise<T> => operation();
-
 class ReasoningService extends BaseReasoningService {
   private apiKeyCache: SecureCache<string>;
   private openAiEndpointPreference = new Map<string, "responses" | "chat">();
@@ -1038,24 +1036,22 @@ class ReasoningService extends BaseReasoningService {
       const language = this.getPreferredLanguage();
       const locale = this.getUiLanguage();
 
-      const result = await runCloudRequest(async () => {
-        const res = await (window as any).electronAPI.cloudReason(text, {
-          agentName,
-          customDictionary,
-          customPrompt: this.getCustomPrompt(),
-          systemPrompt: config.systemPrompt,
-          language,
-          locale,
-        });
-
-        if (!res.success) {
-          const err: any = new Error(res.error || "OpenWhispr cloud reasoning failed");
-          err.code = res.code;
-          throw err;
-        }
-
-        return res;
+      const res = await (window as any).electronAPI.cloudReason(text, {
+        agentName,
+        customDictionary,
+        customPrompt: this.getCustomPrompt(),
+        systemPrompt: config.systemPrompt,
+        language,
+        locale,
       });
+
+      if (!res.success) {
+        const err: any = new Error(res.error || "OpenWhispr cloud reasoning failed");
+        err.code = res.code;
+        throw err;
+      }
+
+      const result = res;
 
       logger.logReasoning("OPENWHISPR_SUCCESS", {
         model: result.model,
